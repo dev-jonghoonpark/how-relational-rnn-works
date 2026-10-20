@@ -120,6 +120,7 @@ nav.toc a:hover{color:var(--s1)}
 .quiz-score{font-size:15px;font-weight:700;margin-top:14px}
 .tog{position:fixed;top:14px;right:14px;z-index:10;border-radius:999px;padding:7px 13px;
   background:var(--surface-1);border:1px solid var(--border);font-size:12.5px}
+@media (max-width:640px){.tog{position:absolute}}
 footer{margin-top:70px;padding-top:22px;border-top:1px solid var(--border);color:var(--muted);font-size:13px}
 footer a{color:var(--text-secondary)}
 .refs{font-size:13px;color:var(--text-secondary);line-height:1.7}
@@ -389,6 +390,32 @@ sup.fn a{text-decoration:none;font-weight:700;padding:0 2px}
   <p class="cap" style="margin:6px 0 0">행은 쿼리 쪽(슬롯 m) 특징, 열은 키 쪽(슬롯 j) 특징입니다. 마지막 열(키 쪽 1)은 j와 무관한 항이라 소프트맥스에 영향이 없어 흐리게 그렸습니다.</p>
 </div>
 <p>스텝 1,500에서 세 모델의 정확도는 [x, 1]이 78%, [x, ‖x‖², 1]이 99%, MLP가 94%입니다(마지막 50스텝 평균, 시드를 고정해 두어 매번 같습니다). 따로 뽑은 2,000문제로 다시 재도 80%, 99%, 94%로 비슷합니다. 차이는 위 식에서 나옵니다. 거리 제곱 ‖x<sub>m</sub> − x<sub>j</sub>‖²를 j에 대해 펼치면 −2x<sub>m</sub>·x<sub>j</sub> + ‖x<sub>j</sub>‖² + (j와 무관한 상수)이고, [x, 1]만 있으면 내적으로 ‖x<sub>j</sub>‖² 항을 만들 수 없습니다. 이 모델은 “m과 반대 방향에 있는 점”으로 근사하는 데서 멈춥니다. ‖x‖²를 넣어 주면 거의 완벽해지고, 그 특징을 사람이 주지 않아도 <strong>슬롯별 MLP</strong>가 스스로 만들어 냅니다. RMC가 어텐션 뒤에 행별 MLP를 두는 이유 중 하나를 작게 보여 주는 예입니다. 아래 그림의 왼쪽은 학습된 W<sup>q</sup>(W<sup>k</sup>)<sup>⊤</sup>, 오른쪽은 손으로 배선한 행렬을 같은 눈금으로 맞춘 것입니다.</p>
+<h3>RMC와 LSTM을 직접 붙여 보면</h3>
+<p>논문의 핵심 결과는 이 과제에서 RMC가 LSTM을 크게 이긴다는 것입니다. 같은 경향이 브라우저나 노트북 규모에서도 보이는지 이 페이지의 자동미분으로 직접 확인해 봤습니다. 과제는 논문 형식을 줄인 것입니다. 벡터 T개를 하나씩 보여 주고(라벨 = 제시 순서), m은 원-핫으로 매 스텝 입력에 붙이며, 가장 먼 것(n = 1)만 묻습니다. RMC는 Sonnet과 같은 순서(식 (2) → 잔차 + LayerNorm → 행별 MLP → 잔차 + LayerNorm → 게이트)로 구현했고, 두 모델 모두 출력 앞에 64유닛 MLP를 붙였습니다. 데이터, 배치(32), 옵티마이저(Adam)는 같습니다.</p>
+<div class="demo">
+  <h4>데모 7c · 장난감 N번째로 먼 벡터에서 RMC vs LSTM</h4>
+  <p class="cap">T = 4, 2차원, 가장 먼 벡터. RMC는 슬롯 4개 · 헤드 2개 × 크기 16, LSTM은 은닉 48입니다(파라미터 수는 아래). 학습률 0.003으로 3,000스텝을 같은 배치로 돌립니다. 정확도는 100스텝마다의 학습 배치 평균이고, 점선은 찍기(1/3)입니다. 브라우저에서 1~3분쯤 걸립니다.</p>
+  <div class="btns"><button type="button" id="d7cgo">▶ 학습 시작</button><button type="button" id="d7cstop">■ 멈춤</button><button type="button" id="d7cseed">가중치 시드 바꾸기</button></div>
+  <canvas id="d7ccv" height="220"></canvas>
+  <div class="legend"><span><i style="background:var(--s1)"></i>RMC</span><span><i style="background:var(--s2)"></i>LSTM</span><span><i style="background:var(--muted)"></i>찍기 1/3</span></div>
+  <div class="readout" id="d7cout"></div>
+</div>
+<p><strong>결과부터 말하면 논문의 경향은 이 규모에서 재현되지 않았습니다.</strong> 데모를 기본 시드로 돌리면 1,000스텝에서 RMC 58% · LSTM 79%, 3,000스텝에서 RMC 87% · LSTM 90%로, LSTM이 먼저 올라가고 RMC가 뒤따라옵니다. 같은 비교를 node에서 설정을 바꿔 가며 돌린 결과가 아래 표입니다(정확도는 학습이 끝난 뒤 새로 뽑은 2,000문제로 잼).</p>
+<div class="tw"><table>
+  <thead><tr><th>과제 (T, 차원)</th><th>설정</th><th class="num">스텝</th><th class="num">RMC</th><th class="num">LSTM</th></tr></thead>
+  <tbody id="t7c">
+  <tr><td>T = 4, 2차원</td><td>RMC 슬롯 4 · 헤드 2 × 16 (18,308) vs LSTM 48 (15,300), 시드 2·3</td><td class="num">8,000</td><td class="num">91.1% · 91.2%</td><td class="num">92.8% · 92.1%</td></tr>
+  <tr><td>T = 4, 2차원</td><td>RMC를 헤드 2 × 8로 줄임 (7,012) vs LSTM 24 (5,508)</td><td class="num">8,000</td><td class="num">64% (시드 2, 정체)</td><td class="num">91.4%</td></tr>
+  <tr><td>T = 4, 2차원, 라벨 섞음</td><td>논문처럼 라벨이 제시 순서와 무관</td><td class="num">8,000</td><td class="num">33.5% (찍기)</td><td class="num">89.2%</td></tr>
+  <tr><td>T = 4, 2차원, n ∈ {1, 2, 3}</td><td>n번째로 먼 것까지 물음</td><td class="num">8,000</td><td class="num">33.6% (찍기)</td><td class="num">88.0%</td></tr>
+  <tr><td>T = 4, 8차원</td><td>학습률 0.003</td><td class="num">6,000</td><td class="num">32.7% (찍기)</td><td class="num">74.1%</td></tr>
+  <tr><td>T = 4, 16차원</td><td>학습률 0.001, LSTM 은닉 96</td><td class="num">6,000</td><td class="num">34.6% (찍기)</td><td class="num">55.8%</td></tr>
+  <tr><td>T = 6, 8차원</td><td>RMC 슬롯 6, 학습률 0.001·0.003, 헤드 4까지</td><td class="num">8,000</td><td class="num">20.3~20.9% (찍기 20%)</td><td class="num">57.9%</td></tr>
+  <tr><td>T = 8, 4차원</td><td>RMC 슬롯 8 · 헤드 2 × 16</td><td class="num">8,000</td><td class="num">13.7% (찍기 14%)</td><td class="num">58.1%</td></tr>
+  </tbody>
+</table></div>
+<p>원인을 찾으려고 바꿔 본 것은 슬롯 수(1, 2, 4, 6, 8), 헤드 수와 크기, 학습률(0.001, 0.003), 과제 난이도(라벨 섞기, n의 범위), 벡터 길이와 차원, 시드입니다. 보인 것은 두 가지입니다. 첫째, 가장 쉬운 설정에서는 RMC도 LSTM과 비슷한 정확도(91% 대 92%)에 도달하지만 늘 더 늦게 올라가고, 슬롯이 작으면 시드에 따라 중간에 멈춥니다. 둘째, 과제를 조금만 어렵게 해도(라벨 섞기, 차원 8 이상, 벡터 6개 이상) LSTM은 수천 스텝 안에 찍기를 벗어나는데 RMC는 8,000스텝 내내 정확히 찍기 수준에 머뭅니다. 학습 곡선을 보면 RMC가 조금씩 배우다 막힌 것이 아니라 <strong>처음부터 평평한 구간(plateau)을 빠져나오지 못한 것</strong>입니다.</p>
+<p>이유로 짐작할 수 있는 것은 이렇습니다. RMC는 입력을 어느 슬롯에 쓸지를 어텐션이 정하는데, 학습 초기에는 어텐션이 거의 균등해서 입력이 모든 슬롯에 고루 퍼지고 슬롯들이 비슷해집니다(6절의 대칭 문제를 단위 행렬 초기화가 겨우 깨 주는 정도). 슬롯마다 다른 벡터를 맡는 분업이 생기기 전까지는 거리를 비교할 재료가 없으니 기울기도 약합니다. LSTM은 입력을 은닉 상태에 바로 더하므로 이 단계가 없습니다. 논문은 배치 1,600으로 몇 시간(부록 그림 4의 가로축이 학습 시간)씩 학습했고, 우리는 배치 32로 몇 분입니다. 이 차이가 RMC가 평평한 구간을 벗어나는 데 필요한 양이었는지, 아니면 이 페이지의 구현이 Sonnet과 다른 부분(QKV 뒤 LayerNorm과 LayerNorm의 학습 가능한 배율을 뺌) 때문인지는 이 실험만으로 가를 수 없습니다. 분명한 것은 <strong>“구조가 관계 추론에 맞다”는 것과 “작은 예산에서 빨리 배운다”는 것은 별개</strong>라는 점이고, 논문이 보고한 큰 차이(30% 미만 대 91%)는 그 예산을 들였을 때의 결과입니다.</p>
 <h3>논문의 결과 (5.1절, 부록 그림 4·5)</h3>
 <ul>
   <li>16차원 벡터에서 LSTM과 DNC는 최고 배치 정확도가 <strong>30%를 넘지 못했고</strong>, RMC는 학습이 끝날 때 꾸준히 <strong>91%</strong>에 도달했습니다. LSTM은 은닉 크기를 64부터 4,096까지, DNC는 메모리 수·크기·읽기/쓰기 헤드 수를 바꿔 봤지만 차이가 없었습니다.</li>
@@ -773,10 +800,11 @@ function d4Calc(){var k=+$('#d4k').value,a=+$('#d4a').value;var x=d4M[k].map(fun
   return {k:k,a:a,x:x,r:r,diff:diff};}
 function drawD4(){
   var R=d4Calc();$('#d4kv').textContent=R.k;$('#d4av').textContent=fmt(R.a);
-  var S=setup($('#d4cv')),c=S.c,W=S.w,H=S.h,N=4;c.font='12px system-ui';c.textAlign='left';
-  var cell=Math.min(34,(W-80)/(2*(N+1)+2.2)),gap=cell*1.6;
-  R.r.att.forEach(function(A,h){var gx=34+h*((N+1)*cell+gap),gy=30;
-    c.fillStyle=css('--text-secondary');c.fillText('헤드 '+(h+1)+' (쿼리 4 × 키 5)',gx,18);
+  var cv4=$('#d4cv'),nar=cv4.clientWidth<560,N=4,cell=nar?Math.min(40,(cv4.clientWidth-60)/(N+1.3)):Math.min(34,(cv4.clientWidth-80)/(2*(N+1)+2.2)),gap=cell*1.6;
+  cv4.dataset.h=nar?Math.round(2*(N*cell+48)):230;
+  var S=setup(cv4),c=S.c,W=S.w,H=S.h;c.font='12px system-ui';c.textAlign='left';
+  R.r.att.forEach(function(A,h){var gx=nar?34:34+h*((N+1)*cell+gap),gy=nar?30+h*(N*cell+48):30;
+    c.fillStyle=css('--text-secondary');c.fillText('헤드 '+(h+1)+' (쿼리 4 × 키 5)',gx,gy-12);
     for(var i=0;i<N;i++)for(var j=0;j<=N;j++){c.fillStyle=j===N?hexA(css('--s2'),0.06+0.94*A[i][j]):heat(A[i][j]);c.fillRect(gx+j*cell+(j===N?6:0)+0.5,gy+i*cell+0.5,cell-1,cell-1);
       if(cell>24){c.fillStyle=A[i][j]>0.55?'#fff':css('--text-primary');c.font='10px system-ui';c.textAlign='center';c.fillText(fmt(A[i][j]),gx+j*cell+(j===N?6:0)+cell/2,gy+i*cell+cell/2+3);c.textAlign='left';c.font='12px system-ui';}}
     c.strokeStyle=css('--muted');c.setLineDash([3,3]);c.beginPath();c.moveTo(gx+N*cell+3,gy-4);c.lineTo(gx+N*cell+3,gy+N*cell+4);c.stroke();c.setLineDash([]);
@@ -891,9 +919,9 @@ function d7Calc(beta,n){var mask=d7pts.map(function(){return false;}),rounds=[],
 function drawD7(){
   var beta=+$('#d7b').value,n=+$('#d7n').value;$('#d7bv').textContent=fmt(beta,1);$('#d7nv').textContent=n;
   var R=d7Calc(beta,n),last=R[R.length-1];
-  $('#d7cv').dataset.h=$('#d7cv').clientWidth<560?420:300;
+  var cw0=$('#d7cv').clientWidth;$('#d7cv').dataset.h=cw0<560?Math.round(Math.min(cw0-16,380)+16+190):300;
   var S=setup($('#d7cv')),c=S.c,W=S.w,H=S.h,narrow=W<560,side=narrow?Math.min(W,H)-110:Math.min(W*0.55,H)-16,ox=8,oy=8;
-  if(narrow){side=Math.min(W-16,H-100);ox=(W-side)/2;}
+  if(narrow){side=Math.min(W-16,380);ox=(W-side)/2;}
   function X(v){return ox+(v+1)/2*side;}function Y(v){return oy+(1-(v+1)/2)*side;}
   d7geo={X:X,Y:Y};
   c.strokeStyle=css('--grid');c.strokeRect(ox,oy,side,side);
@@ -905,10 +933,21 @@ function drawD7(){
     c.fillStyle=j===d7m?'#fff':css('--text-primary');c.font='600 11px system-ui';c.textAlign='center';c.textBaseline='middle';c.fillText(j+1,X(p[0]),Y(p[1]));});
   c.textBaseline='alphabetic';
   /* 막대 */
-  var bx=narrow?8:ox+side+30,by=narrow?oy+side+18:oy+20,bw=narrow?W-16:W-bx-10,bh=narrow?H-by-18:H-by-40,cw=bw/6;
-  c.font='11px system-ui';c.fillStyle=css('--text-secondary');c.textAlign='left';c.fillText((n>1?n+'번째 ':'')+'어텐션 가중치 (슬롯 '+(d7m+1)+'의 쿼리)',bx,by-6);
+  c.font='11px system-ui';
+  if(narrow){/* 모바일: 가로 막대 */
+    c.textBaseline='middle';
+    var bx=34,by=oy+side+30,rowH=24,bw=W-bx-48;
+    c.fillStyle=css('--text-secondary');c.textAlign='left';c.font='12px system-ui';c.fillText((n>1?n+'번째 ':'')+'어텐션 가중치 (슬롯 '+(d7m+1)+'의 쿼리)',8,by-10);c.font='11px system-ui';
+    last.w.forEach(function(v,j){var y=by+j*rowH;c.fillStyle=css('--grid');c.fillRect(bx,y,bw,rowH-7);
+      c.fillStyle=j===last.pick?css('--s2'):css('--s1');c.fillRect(bx,y,Math.max(1,v*bw),rowH-7);
+      c.fillStyle=css('--text-secondary');c.textAlign='right';c.fillText('점 '+(j+1),bx-5,y+rowH/2);
+      c.textAlign='left';c.fillStyle=css('--text-primary');c.fillText(fmt(v),bx+bw+6,y+rowH/2);});c.textBaseline='alphabetic';
+  }else{
+  var bx=ox+side+30,by=oy+20,bw=W-bx-10,bh=H-by-40,cw=bw/6;
+  c.fillStyle=css('--text-secondary');c.textAlign='left';c.fillText((n>1?n+'번째 ':'')+'어텐션 가중치 (슬롯 '+(d7m+1)+'의 쿼리)',bx,by-6);
   last.w.forEach(function(v,j){c.fillStyle=j===last.pick?css('--s2'):css('--s1');var hh=Math.max(1,v*(bh-16));c.fillRect(bx+j*cw+4,by+bh-16-hh,cw-8,hh);
-    c.fillStyle=css('--muted');c.textAlign='center';c.fillText(j+1,bx+j*cw+cw/2,by+bh-3);if(!narrow||bh>40)c.fillText(fmt(v),bx+j*cw+cw/2,by+bh-20-hh);});
+    c.fillStyle=css('--muted');c.textAlign='center';c.fillText(j+1,bx+j*cw+cw/2,by+bh-3);c.fillText(fmt(v),bx+j*cw+cw/2,by+bh-20-hh);});
+  }
   var truth=d7pts.map(function(p,j){return j;}).filter(function(j){return j!==d7m;}).sort(function(a,b){return dist2(d7pts[b],m)-dist2(d7pts[a],m);});
   var tgt=beta>=0?truth[n-1]:truth[truth.length-n];
   $('#d7out').innerHTML='<span>q<sub>m</sub>·k<sub>j</sub> = 거리²<b>확인: '+fmt(dot(d7Query(m),d7Key(d7pts[truth[0]])),4)+' = '+fmt(dist2(m,d7pts[truth[0]]),4)+'</b></span>'+
@@ -967,6 +1006,43 @@ function drawD7b(){
 $('#d7go').addEventListener('click',function(){if(d7timer)return;if(d7st.it>=1500)d7st=FAR.init();d7timer=requestAnimationFrame(d7Loop);});
 $('#d7stop').addEventListener('click',function(){if(d7timer){cancelAnimationFrame(d7timer);d7timer=null;}});
 $('#d7reset').addEventListener('click',function(){if(d7timer){cancelAnimationFrame(d7timer);d7timer=null;}d7st=FAR.init();drawD7b();});
+
+
+/* ══════ 데모 7c · RMC vs LSTM 장난감 비교 ══════ */
+var CMP={T:4,DIM:2,iters:3000,
+  D:function(){return CMP.DIM+CMP.T+(CMP.T-1)+CMP.T;},
+  sample:function(r){var T=CMP.T,DIM=CMP.DIM,D=CMP.D(),xs=[];for(var t=0;t<T;t++){var v=[];for(var d=0;d<DIM;d++)v.push(r()*2-1);xs.push(v);}
+    var m=Math.floor(r()*T),y=-1,best=-1;for(t=0;t<T;t++){if(t===m)continue;var s=0;for(d=0;d<DIM;d++)s+=Math.pow(xs[t][d]-xs[m][d],2);if(s>best){best=s;y=t;}}
+    var inp=xs.map(function(v,t){var a=new Float64Array(D);v.forEach(function(x,d){a[d]=x;});a[DIM+t]=1;a[DIM+T]=1;a[DIM+T+T-1+m]=1;return AD.mk(1,D,a);});
+    return {inp:inp,y:y};},
+  init:function(seed){var st={it:0,seed:seed,data:rng(99),models:{},opts:{},acc:{rmc:0,lstm:0},curves:{rmc:[],lstm:[]}},D=CMP.D();
+    st.models.rmc=new RMC({D:D,N:4,H:2,hs:16,Hout:64,C:CMP.T},rng(seed));st.models.lstm=new LSTM({D:D,Hh:48,Hout:64,C:CMP.T},rng(seed));
+    ['rmc','lstm'].forEach(function(k){st.opts[k]=new AD.Adam(st.models[k].P,3e-3);});return st;},
+  step:function(st){var batch=[];for(var b=0;b<32;b++)batch.push(CMP.sample(st.data));
+    ['rmc','lstm'].forEach(function(k){var mdl=st.models[k];batch.forEach(function(s){var S=mdl.init();s.inp.forEach(function(x){S=mdl.step(S,x);});
+      var L=AD.xent(mdl.out(S),s.y),am=0;for(var j=1;j<CMP.T;j++)if(L.p[j]>L.p[am])am=j;st.acc[k]+=am===s.y?1:0;AD.backward(L);});st.opts[k].step(1/32);});
+    st.it++;if(st.it%100===0)['rmc','lstm'].forEach(function(k){st.curves[k].push(st.acc[k]/3200);st.acc[k]=0;});}
+};
+var d7cSeed=1,d7c=null,d7cTimer=null;
+function d7cLoop(){var t0=performance.now();while(performance.now()-t0<24&&d7c.it<CMP.iters)CMP.step(d7c);drawD7c();
+  if(d7c.it<CMP.iters)d7cTimer=requestAnimationFrame(d7cLoop);else d7cTimer=null;}
+function drawD7c(){
+  if(!d7c)d7c=CMP.init(d7cSeed);
+  var S=setup($('#d7ccv')),c=S.c,W=S.w,H=S.h,L=40,B=24,T=10,I=CMP.iters;
+  function X(i){return L+(W-L-12)*i/I;}function Y(v){return T+(H-T-B)*(1-v);}
+  c.font='11px system-ui';c.strokeStyle=css('--grid');c.fillStyle=css('--muted');c.textAlign='center';
+  for(var i=0;i<=I;i+=500){c.beginPath();c.moveTo(X(i),T);c.lineTo(X(i),H-B);c.stroke();c.fillText(i,X(i),H-B+15);}
+  c.textAlign='right';[0,0.25,0.5,0.75,1].forEach(function(v){c.fillText(Math.round(v*100)+'%',L-6,Y(v)+4);});
+  c.strokeStyle=css('--muted');c.setLineDash([4,4]);c.beginPath();c.moveTo(L,Y(1/3));c.lineTo(W-12,Y(1/3));c.stroke();c.setLineDash([]);
+  [['rmc','--s1'],['lstm','--s2']].forEach(function(p){var cv=d7c.curves[p[0]];if(!cv.length)return;c.strokeStyle=css(p[1]);c.lineWidth=2.4;c.beginPath();
+    cv.forEach(function(v,k){var x=X((k+1)*100);if(k)c.lineTo(x,Y(v));else c.moveTo(x,Y(v));});c.stroke();});
+  function last(k){var cv=d7c.curves[k];return cv.length?Math.round(cv[cv.length-1]*100)+'%':'—';}
+  function np(k){return fmtInt(d7c.models[k].P.reduce(function(a,p){return a+p.v.length;},0));}
+  $('#d7cout').innerHTML='<span>스텝<b>'+d7c.it+' / '+I+'</b></span><span>RMC ('+np('rmc')+'개)<b>'+last('rmc')+'</b></span><span>LSTM ('+np('lstm')+'개)<b>'+last('lstm')+'</b></span><span>가중치 시드<b>'+d7cSeed+'</b></span>';
+}
+$('#d7cgo').addEventListener('click',function(){if(d7cTimer)return;if(d7c.it>=CMP.iters)d7c=CMP.init(d7cSeed);d7cTimer=requestAnimationFrame(d7cLoop);});
+$('#d7cstop').addEventListener('click',function(){if(d7cTimer){cancelAnimationFrame(d7cTimer);d7cTimer=null;}});
+$('#d7cseed').addEventListener('click',function(){if(d7cTimer){cancelAnimationFrame(d7cTimer);d7cTimer=null;}d7cSeed++;d7c=CMP.init(d7cSeed);drawD7c();});
 
 /* ══════ 데모 8 · Learning to Execute 형식 ══════ */
 var d8type='prg',d8seed=1,d8cur=null;
@@ -1148,7 +1224,7 @@ var QZ=[
 })();
 
 /* ══════ 테마·초기화 ══════ */
-function drawAll(){drawD1();drawD2();drawD3();drawD4();drawD5();drawD6();drawD6b();drawD7();drawD7b();if(!d8cur)d8New();else d8Score(false);if(!BW.st)bwNew();else drawD9();drawD10();drawD11();}
+function drawAll(){drawD1();drawD2();drawD3();drawD4();drawD5();drawD6();drawD6b();drawD7();drawD7b();drawD7c();if(!d8cur)d8New();else d8Score(false);if(!BW.st)bwNew();else drawD9();drawD10();drawD11();}
 var tbtn=$('#themeBtn');
 if(window.matchMedia&&window.matchMedia('(prefers-color-scheme: dark)').matches)document.documentElement.setAttribute('data-theme','dark');
 function syncBtn(){tbtn.textContent=document.documentElement.getAttribute('data-theme')==='dark'?'◑ 라이트':'◐ 다크';}
