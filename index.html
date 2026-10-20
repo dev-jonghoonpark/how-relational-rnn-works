@@ -1,0 +1,1167 @@
+<!DOCTYPE html>
+<html lang="ko" data-theme="light">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Relational RNN — 기억끼리 대화하는 순환 신경망</title>
+<meta name="description" content="Relational Recurrent Neural Networks(Santoro 외, NeurIPS 2018)를 브라우저에서 직접 계산하며 배우는 인터랙티브 교육 자료. 메모리 슬롯끼리 multi-head attention을 하는 Relational Memory Core, [M; x] 어텐션, MLP와 LSTM식 게이트, 슬롯 수와 파라미터, N번째로 먼 벡터, 프로그램 평가, BoxWorld, 언어 모델링 결과와 한계까지.">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css">
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js"></script>
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/contrib/auto-render.min.js"></script>
+<style>
+:root{
+  color-scheme: light;
+  --surface-1:#fcfcfb;
+  --page:#f9f9f7;
+  --text-primary:#0b0b0b;
+  --text-secondary:#52514e;
+  --muted:#898781;
+  --grid:#e1e0d9;
+  --axis:#c3c2b7;
+  --border:rgba(11,11,11,0.10);
+  --s1:#2a78d6;
+  --s2:#eb6834;
+  --s3:#1baf7a;
+  --s4:#8b5cf6;
+  --s8:#e34948;
+  --warn:#fab219;
+  --good:#0ca30c;
+  --wash:rgba(42,120,214,0.08);
+}
+:root[data-theme="dark"]{
+  color-scheme: dark;
+  --surface-1:#1a1a19;
+  --page:#0d0d0d;
+  --text-primary:#ffffff;
+  --text-secondary:#c3c2b7;
+  --muted:#898781;
+  --grid:#2c2c2a;
+  --axis:#383835;
+  --border:rgba(255,255,255,0.10);
+  --s1:#3987e5;
+  --s2:#d95926;
+  --s3:#199e70;
+  --s4:#a78bfa;
+  --s8:#e66767;
+  --warn:#fab219;
+  --good:#0ca30c;
+  --wash:rgba(57,135,229,0.14);
+}
+*{box-sizing:border-box}
+html{-webkit-text-size-adjust:100%; scroll-behavior:smooth}
+body{
+  margin:0; background:var(--page); color:var(--text-primary);
+  font-family:system-ui,-apple-system,"Segoe UI","Apple SD Gothic Neo","Noto Sans KR",sans-serif;
+  font-size:16px; line-height:1.75; letter-spacing:-0.01em;
+}
+.wrap{max-width:880px;margin:0 auto;padding:0 16px 120px}
+header.hero{padding:56px 0 28px;border-bottom:1px solid var(--border);margin-bottom:8px}
+h1{font-size:clamp(28px,5.2vw,42px);line-height:1.25;margin:0 0 12px;letter-spacing:-0.03em}
+.sub{color:var(--text-secondary);font-size:17px;margin:0}
+.kicker{font-size:12px;letter-spacing:0.12em;text-transform:uppercase;color:var(--muted);font-weight:600;margin:0 0 10px}
+h2{font-size:clamp(21px,3.4vw,27px);margin:56px 0 6px;letter-spacing:-0.02em;line-height:1.3}
+h3{font-size:18px;margin:34px 0 6px;letter-spacing:-0.015em}
+p{margin:12px 0}
+ul,ol{margin:12px 0;padding-left:22px}
+li{margin:6px 0}
+strong{font-weight:650}
+code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:0.9em;background:var(--wash);padding:1px 5px;border-radius:4px}
+a{color:var(--s1)}
+.demo{background:var(--surface-1);border:1px solid var(--border);border-radius:14px;padding:18px;margin:24px 0}
+.demo h4{margin:0 0 2px;font-size:15px;color:var(--text-primary);font-weight:650}
+.demo .cap{color:var(--muted);font-size:13px;margin:0 0 14px;line-height:1.6}
+canvas{display:block;width:100%;border-radius:8px;background:var(--surface-1);touch-action:manipulation}
+.ctrls{display:flex;flex-wrap:wrap;gap:14px 22px;margin:14px 0 4px;align-items:flex-end}
+.ctrl{flex:1 1 210px;min-width:170px}
+.ctrl label{display:flex;justify-content:space-between;align-items:baseline;font-size:13px;color:var(--text-secondary);margin-bottom:4px;gap:10px}
+.ctrl label b{font-variant-numeric:tabular-nums;color:var(--text-primary);font-weight:650;font-size:13px}
+input[type=range]{width:100%;accent-color:var(--s1);height:22px;margin:0}
+.btns{display:flex;flex-wrap:wrap;gap:8px;margin-top:14px}
+button{font:inherit;font-size:13px;font-weight:600;padding:7px 14px;border-radius:8px;cursor:pointer;
+  border:1px solid var(--border);background:var(--surface-1);color:var(--text-primary);transition:background .12s}
+button:hover{background:var(--wash)}
+button[aria-pressed=true]{background:var(--wash);border-color:var(--s1)}
+.legend{display:flex;flex-wrap:wrap;gap:6px 16px;font-size:12.5px;color:var(--text-secondary);margin:10px 0 0}
+.legend span{display:inline-flex;align-items:center;gap:6px}
+.legend i{width:14px;height:3px;border-radius:2px;display:inline-block}
+.readout{display:flex;flex-wrap:wrap;gap:8px 26px;margin-top:12px;font-size:13px;color:var(--text-secondary)}
+.readout b{display:block;font-size:19px;color:var(--text-primary);font-weight:650;line-height:1.3;letter-spacing:-0.02em;font-variant-numeric:tabular-nums}
+.eq{background:var(--surface-1);border:1px solid var(--border);border-left:3px solid var(--s1);
+  border-radius:0 10px 10px 0;padding:14px 18px;margin:18px 0;overflow-x:auto;text-align:center}
+.eq .note{display:block;font-size:12.5px;color:var(--muted);margin:6px 0 0;line-height:1.55;text-align:left}
+.tw{overflow-x:auto;margin:18px 0;border:1px solid var(--border);border-radius:12px;background:var(--surface-1)}
+table{border-collapse:collapse;width:100%;font-size:14px}
+th,td{padding:9px 13px;text-align:left;border-bottom:1px solid var(--border);vertical-align:middle}
+th{font-weight:650;font-size:12.5px;color:var(--text-secondary);background:var(--page)}
+tr:last-child td{border-bottom:none}
+td.num,th.num{font-variant-numeric:tabular-nums;text-align:right}
+td.mono{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:13px}
+.note{border-left:3px solid var(--axis);padding:2px 0 2px 16px;margin:18px 0;color:var(--text-secondary);font-size:14.5px}
+.key{border:1px solid var(--border);border-left:3px solid var(--s2);background:var(--surface-1);
+  border-radius:0 10px 10px 0;padding:14px 18px;margin:20px 0}
+.key .lbl{font-size:11.5px;font-weight:700;letter-spacing:0.1em;color:var(--s2);display:block;margin-bottom:4px}
+.key p{margin:0}
+nav.toc{background:var(--surface-1);border:1px solid var(--border);border-radius:14px;padding:18px 22px;margin:26px 0}
+nav.toc ol{margin:6px 0 0;padding-left:20px;font-size:14.5px}
+nav.toc a{text-decoration:none;color:var(--text-primary)}
+nav.toc a:hover{color:var(--s1)}
+.q{border:1px solid var(--border);border-radius:10px;background:var(--surface-1);padding:16px 18px;margin:14px 0}
+.q h4{margin:0 0 8px;font-size:15px;color:var(--text-primary)}
+.q .opt{display:flex;gap:9px;align-items:flex-start;padding:7px 10px;border:1px solid var(--border);
+  border-radius:8px;margin:6px 0;cursor:pointer;font-size:14px;transition:border-color .12s}
+.q .opt:hover{border-color:var(--s1)}
+.q .opt input{margin-top:5px;accent-color:var(--s1)}
+.q .opt.correct{border-color:var(--good);background:rgba(12,163,12,0.08)}
+.q .opt.wrong{border-color:var(--s8);background:rgba(227,73,72,0.07)}
+.q .expl{display:none;font-size:13.5px;color:var(--text-secondary);border-left:3px solid var(--good);
+  padding:2px 0 2px 12px;margin-top:10px;line-height:1.65}
+.q .expl.bad{border-left-color:var(--s8)}
+.q .expl.show{display:block}
+.quiz-score{font-size:15px;font-weight:700;margin-top:14px}
+.tog{position:fixed;top:14px;right:14px;z-index:10;border-radius:999px;padding:7px 13px;
+  background:var(--surface-1);border:1px solid var(--border);font-size:12.5px}
+footer{margin-top:70px;padding-top:22px;border-top:1px solid var(--border);color:var(--muted);font-size:13px}
+footer a{color:var(--text-secondary)}
+.refs{font-size:13px;color:var(--text-secondary);line-height:1.7}
+.easy{background:var(--surface-1);border:1px solid var(--border);border-left:3px solid var(--s3);border-radius:0 14px 14px 0;padding:18px 20px;margin:24px 0}
+.easy .lbl{font-size:11.5px;font-weight:700;letter-spacing:0.1em;color:var(--s3);display:block;margin-bottom:2px}
+.easy h3{margin:0 0 8px}
+.easy ol{padding-left:20px}
+.easy .big{font-size:17px;text-align:center;margin:10px 0;font-weight:650}
+.sw{display:grid;grid-template-columns:150px 1fr 64px;gap:8px 10px;align-items:center;font-size:13px;margin-top:12px}
+.sw .bar{position:relative;height:18px;background:var(--page);border:1px solid var(--border);border-radius:4px}
+.sw .bar i{position:absolute;top:0;bottom:0;border-radius:3px}
+.sw .bar:after{content:'';position:absolute;left:50%;top:-3px;bottom:-3px;border-left:1px solid var(--axis)}
+.sw b{font-variant-numeric:tabular-nums;text-align:right}
+/* 이 페이지 전용 */
+.rank{margin-top:10px;font-size:13px;color:var(--text-secondary)}
+.rank div{display:flex;flex-wrap:wrap;align-items:center;gap:5px;margin:5px 0}
+.rank em{font-style:normal;min-width:150px;color:var(--muted)}
+.chip{display:inline-flex;align-items:center;justify-content:center;min-width:24px;height:24px;border-radius:999px;border:1.5px solid var(--s1);font-weight:650;font-size:12px;color:var(--text-primary);font-variant-numeric:tabular-nums}
+.chip.ref{border-color:var(--s3);background:var(--s3);color:#fff}
+.chip.hl{border-color:var(--s2);background:var(--s2);color:#fff}
+.mono-out{margin-top:10px;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:12.5px;line-height:1.7;color:var(--text-secondary);overflow-x:auto}
+pre.code{margin:6px 0 0;padding:12px 14px;border:1px solid var(--border);border-radius:8px;background:var(--page);font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:13px;line-height:1.55;overflow-x:auto;white-space:pre;min-height:120px}
+input[type=text]{font:inherit;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:15px;width:100%;margin-top:6px;padding:9px 12px;border-radius:8px;border:1px solid var(--border);background:var(--page);color:var(--text-primary)}
+.bw{display:flex;gap:16px;align-items:flex-start;margin-top:12px}
+.bw canvas{flex:1 1 auto;min-width:0}
+.bwside{flex:0 0 230px;font-size:12.5px;color:var(--text-secondary)}
+@media (max-width:640px){.rank em{flex-basis:100%}.bw{flex-direction:column}.bwside{flex:none;width:100%}}
+.pad{display:grid;grid-template-columns:repeat(3,48px);gap:6px;justify-content:center;margin-bottom:12px}
+.pad button{padding:8px 0;font-size:16px}
+.seen .sh{font-weight:650;color:var(--text-primary);margin:8px 0 4px}
+.seen .bxr{display:flex;align-items:center;gap:2px;margin:3px 0}
+.seen .bxr span{margin-left:8px}
+.seen .bxr.op{opacity:0.45}
+.seen .sm{margin:3px 0}
+.seen em{font-style:normal;color:var(--s8);margin-left:2px}
+i.sw{display:inline-block;width:14px;height:14px;border-radius:2px;vertical-align:-2px;border:1px solid rgba(0,0,0,0.25)}
+i.sw.gem{background:#fff}
+.readout b i.sw{width:18px;height:18px}
+.split{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:18px}
+@media (max-width:640px){.split{grid-template-columns:minmax(0,1fr)}}
+.split h5{margin:4px 0 0;font-size:13px;color:var(--text-secondary);font-weight:650}
+.flow{display:flex;flex-wrap:wrap;align-items:center;gap:6px;font-size:13px;margin:16px 0;justify-content:center}
+.flow span{border:1px solid var(--border);background:var(--surface-1);border-radius:8px;padding:5px 10px;font-weight:600}
+.flow em{color:var(--muted);font-style:normal}
+sup.fn{font-size:0.72em;line-height:0;margin-left:1px}
+sup.fn a{text-decoration:none;font-weight:700;padding:0 2px}
+.footnotes{margin-top:64px;padding-top:18px;border-top:1px solid var(--border);font-size:14.5px;color:var(--text-secondary)}
+.footnotes h2{font-size:18px;margin:0 0 10px;color:var(--text-primary)}
+.footnotes ol{padding-left:22px}
+.footnotes li:target{background:var(--wash);border-radius:8px}
+.footnotes p{margin:10px 0}
+.footnotes .tw{font-size:13.5px}
+.footnotes .back{text-decoration:none;margin-left:4px}
+.pill{display:inline-block;font-size:11.5px;font-weight:700;padding:1px 8px;border-radius:999px;background:var(--wash);color:var(--s1);margin-left:6px;vertical-align:2px}
+</style>
+</head>
+<body>
+<button class="tog" id="themeBtn" type="button">◐ 다크</button>
+<div class="wrap">
+<header class="hero">
+  <p class="kicker">메모리 증강 신경망 · Santoro 외 (NeurIPS 2018)</p>
+  <h1>Relational RNN — 기억끼리 대화하는 순환 신경망</h1>
+  <p class="sub">LSTM은 기억을 벡터 하나에 섞어 담고, NTM은 기억을 칸으로 나눠 담습니다. 그런데 둘 다 한번 담아 둔 기억끼리 서로 비교하게 하는 장치는 따로 없습니다. 「Relational Recurrent Neural Networks」는 메모리를 여러 슬롯으로 두고, 매 스텝 슬롯들이 <strong>서로에게, 그리고 새 입력에</strong> multi-head attention을 하게 만들었습니다. 이것이 Relational Memory Core(RMC)입니다. 이 페이지는 논문 3절의 식 (1)~(9)를 브라우저에서 직접 계산해 보고, N번째로 먼 벡터 찾기, 프로그램 평가, Mini PacMan, 언어 모델링 결과를 원문 표의 숫자로 따라갑니다.</p>
+</header>
+
+<div class="key"><span class="lbl">이 페이지의 축</span>
+<p><strong>RMC는 메모리를 갱신하는 연산 자체를 [M; x] 위의 셀프 어텐션으로 바꿨습니다. 같은 어텐션 한 번이 새 입력을 받아들이는 일과 기억끼리 서로 비교하는 일을 함께 합니다.</strong> 나머지(MLP, LSTM식 게이트, 슬롯 수와 헤드 수)는 이 어텐션을 순환 신경망 안에서 안정적으로 돌리기 위한 부품입니다.</p></div>
+
+<nav class="toc">
+  <strong>학습 경로</strong>
+  <ol>
+    <li><a href="#s1">관계 추론: 속성이 아니라 관계</a></li>
+    <li><a href="#s2">칸끼리 대화하지 않는 기억</a></li>
+    <li><a href="#s3">기억끼리 어텐션 — 식 (1)</a></li>
+    <li><a href="#s4">새 입력도 같은 어텐션으로 — 식 (2)</a></li>
+    <li><a href="#s5">LSTM 안에 넣기: MLP와 게이트 — 식 (3)~(9)</a></li>
+    <li><a href="#s6">슬롯 수, 슬롯 크기, 헤드 수</a></li>
+    <li><a href="#s7">N번째로 먼 벡터</a></li>
+    <li><a href="#s8">프로그램 평가와 강화학습</a></li>
+    <li><a href="#s9">언어 모델링</a></li>
+    <li><a href="#s10">한계와 그다음</a></li>
+    <li><a href="#s11">확인 퀴즈</a></li>
+  </ol>
+</nav>
+
+<!-- ───────── 1 ───────── -->
+<h2 id="s1">1. 관계 추론: 속성이 아니라 관계</h2>
+<p>논문 2절은 관계 추론을 “개체들이 어떻게 연결되어 있는지 이해하고, 그 이해로 더 높은 목표를 이루는 과정”이라고 정의하고 예를 하나 듭니다. 공원 벤치에서 나무들까지의 거리를 가까운 순서로 정렬하는 일입니다. 나무 하나하나의 위치(<strong>속성</strong>)만 따로 봐서는 이 문제를 풀 수 없고, 나무와 벤치 사이의 거리(<strong>관계</strong>)를 비교해야 답이 나옵니다.</p>
+<p>논문이 만든 장난감 과제 “N번째로 먼 벡터”가 바로 이 구조입니다. 벡터 여러 개를 하나씩 보여 준 뒤 “벡터 m에서 n번째로 먼 벡터는?”을 묻습니다. 기준 벡터 m은 수열 중간에 나올 수도, 아직 안 나왔을 수도 있습니다.</p>
+
+<div class="demo">
+  <h4>데모 1 · 같은 점, 다른 질문</h4>
+  <p class="cap">점 8개는 그대로 두고 기준점 m만 바꿔 봅니다. 그림에서 점을 클릭하면 그 점이 m이 됩니다. 아래 두 줄은 “x 좌표 순서”(각 점의 속성만으로 정해지는 순서)와 “m에서의 거리 순서”(관계)입니다.</p>
+  <div class="ctrls">
+    <div class="ctrl"><label>n (몇 번째로 먼 것) <b id="d1nv"></b></label><input type="range" id="d1n" min="1" max="7" step="1" value="2"></div>
+  </div>
+  <div class="btns"><button type="button" id="d1new">새 점들</button><button type="button" id="d1rand">m 무작위로</button></div>
+  <canvas id="d1cv" height="300"></canvas>
+  <div class="rank" id="d1rank"></div>
+  <div class="readout" id="d1out"></div>
+</div>
+<p>m을 바꾸면 점은 하나도 움직이지 않았는데 답이 바뀝니다. x 좌표 순서는 m과 상관없이 늘 같습니다. 그래서 이 과제는 벡터를 하나씩 저장했다가 꺼내는 것(복사 과제)만으로는 풀리지 않고, 저장해 둔 벡터들 사이의 거리를 <strong>계산해서 비교해야</strong> 합니다. 논문 4.1절의 표현으로 “모델은 벡터 자체가 아니라 벡터 사이의 거리 관계를 정렬해야” 합니다.</p>
+
+<!-- ───────── 2 ───────── -->
+<h2 id="s2">2. 칸끼리 대화하지 않는 기억</h2>
+<p>저자들은 기존 기억 구조를 두 가지로 나눠 비판합니다(2절 끝).</p>
+<ul>
+  <li><strong>LSTM</strong>은 모든 정보를 은닉 벡터 하나에 넣습니다. 칸을 나눠 담는 것(compartmentalization)부터가 어렵습니다.</li>
+  <li><strong>NTM·DNC 같은 메모리 증강 신경망</strong>은 슬롯 행렬로 칸 나누기 문제를 풉니다. 하지만 기억이 일단 칸에 쓰이고 나면 그 기억들끼리 서로 작용하기는 어렵습니다. NTM의 내용 주소는 컨트롤러가 낸 키 하나와 각 칸을 비교할 뿐, 칸과 칸을 비교하지 않습니다.</li>
+</ul>
+<p>RMC는 두 구조의 장점을 합칩니다. 칸은 NTM처럼 고정된 개수로 나누고, 칸끼리는 Transformer의 셀프 어텐션으로 서로를 봅니다.</p>
+
+<div class="demo">
+  <h4>데모 2 · 한 스텝 안에서 누가 누구를 보나</h4>
+  <p class="cap">선 하나는 한 스텝 안에서 직접 계산되는 비교(내적이나 코사인 유사도) 하나입니다. NTM은 읽기 헤드 1개, RMC는 헤드 1개로 그렸고, 아래 숫자는 헤드 수까지 반영합니다.</p>
+  <div class="btns"><button type="button" id="d2a">LSTM</button><button type="button" id="d2b">NTM</button><button type="button" id="d2c" aria-pressed="true">RMC</button></div>
+  <div class="ctrls">
+    <div class="ctrl"><label>메모리 슬롯 수 N <b id="d2nv"></b></label><input type="range" id="d2n" min="2" max="10" step="1" value="6"></div>
+    <div class="ctrl"><label>헤드 수 (NTM 읽기 헤드 / RMC 어텐션 헤드) <b id="d2hv"></b></label><input type="range" id="d2h" min="1" max="8" step="1" value="1"></div>
+  </div>
+  <canvas id="d2cv" height="300"></canvas>
+  <div class="readout" id="d2out"></div>
+</div>
+<p>NTM에서는 비교가 언제나 “컨트롤러의 키 ↔ 칸”입니다. 3번 칸과 5번 칸의 관계를 알려면 컨트롤러가 한 칸을 읽어 자기 상태에 담아 두고, 다음 스텝에 그걸로 키를 만들어 다른 칸을 찾아야 합니다. RMC에서는 슬롯마다 쿼리를 내므로 “칸 ↔ 칸” 비교 N × (N + 1)개가 한 스텝에 동시에 일어납니다. +1은 새 입력입니다.</p>
+
+<!-- ───────── 3 ───────── -->
+<h2 id="s3">3. 기억끼리 어텐션 — 식 (1)</h2>
+<p>3.1절은 일단 입력은 잊고, 메모리 행렬 M이 이미 있다고 가정합니다. M은 N × F 행렬이고 각 행 m<sub>i</sub>가 기억 하나입니다. 모든 행에 같은 가중치로 쿼리·키·값을 만들고(Q = MW<sup>q</sup>, K = MW<sup>k</sup>, V = MW<sup>v</sup>), Transformer의 scaled dot-product attention을 그대로 적용합니다.</p>
+<div class="eq">
+  $$A_\theta(M) = \mathrm{softmax}\!\left(\frac{MW^q\,(MW^k)^\top}{\sqrt{d_k}}\right) MW^v,\qquad \theta = (W^q, W^k, W^v)$$
+  <span class="note">식 (1). 결과 \(\widetilde M\)은 M과 같은 크기입니다. 각 \(\tilde m_i\)는 다른 기억들 m<sub>j</sub>에서 가져온 정보로 만든 “갱신 제안”입니다. 헤드가 h개면 헤드마다 다른 W로 N × F/h 결과를 만들고 열 방향으로 이어 붙입니다: \(\widetilde M = [\widetilde M_1 : \widetilde M_2 : \cdots]\).</span>
+</div>
+
+<div class="demo">
+  <h4>데모 3 · 메모리 위의 multi-head attention</h4>
+  <p class="cap">슬롯 크기 F = 8로 고정하고 슬롯 수와 헤드 수를 바꿉니다. 메모리와 W<sup>q</sup>, W<sup>k</sup>, W<sup>v</sup>는 시드로 만든 무작위 값이고, 모든 값은 실제로 식 (1)로 계산합니다. 히트맵의 행은 “보내는 쪽”(쿼리를 낸 슬롯), 열은 “보는 대상”(키)입니다. 히트맵의 행을 클릭하면 그 슬롯의 계산을 아래에 풀어 씁니다.</p>
+  <div class="ctrls">
+    <div class="ctrl"><label>슬롯 수 N <b id="d3nv"></b></label><input type="range" id="d3n" min="2" max="8" step="1" value="5"></div>
+    <div class="ctrl"><label>헤드 수 h (F/h = 헤드 크기) <b id="d3hv"></b></label><input type="range" id="d3h" min="0" max="3" step="1" value="1"></div>
+    <div class="ctrl"><label>W 크기 (클수록 뾰족한 어텐션) <b id="d3sv"></b></label><input type="range" id="d3s" min="0" max="5" step="0.05" value="3"></div>
+  </div>
+  <div class="btns"><button type="button" id="d3new">메모리·가중치 새로 뽑기</button></div>
+  <canvas id="d3cv" height="260"></canvas>
+  <div class="readout" id="d3out"></div>
+  <div class="mono-out" id="d3row"></div>
+</div>
+<p>W 크기를 0으로 내리면 모든 점수가 0이 되어 어텐션이 균등해지고, 모든 슬롯이 같은 평균을 받습니다. 키우면 슬롯마다 몇 개만 골라 봅니다. 헤드를 늘리면 같은 슬롯이 헤드마다 다른 상대를 봅니다. 논문은 이것을 “기억 하나가 헤드마다 서로 다른 정보를 서로 다른 대상과 나누게 해 준다”고 설명합니다. 대가는 헤드 크기입니다. F = 8을 헤드 8개로 나누면 헤드 하나가 다루는 차원은 1입니다.</p>
+
+<!-- ───────── 4 ───────── -->
+<h2 id="s4">4. 새 입력도 같은 어텐션으로 — 식 (2)</h2>
+<p>3.2절은 새 입력 x를 메모리에 넣는 방법을 식 (1)을 한 군데만 고쳐서 해결합니다. 키와 값을 만들 때 메모리 아래에 입력 행을 하나 붙입니다. 쿼리는 M에서만 만듭니다.</p>
+<div class="eq">
+  $$\widetilde M = \mathrm{softmax}\!\left(\frac{MW^q\,([M;x]W^k)^\top}{\sqrt{d_k}}\right)[M;x]W^v$$
+  <span class="note">식 (2). [M; x]는 행 방향 이어 붙이기((N+1) × F). 쿼리는 N개, 키·값은 N + 1개라서 어텐션 행렬은 N × (N + 1)이고 결과 \(\widetilde M\)은 여전히 N × F입니다. 논문의 말로 “메모리 크기를 보존하는 어텐션”이고, <strong>기억끼리의 상호작용과 새 정보 받아들이기를 같은 연산으로</strong> 합니다.</span>
+</div>
+
+<div class="demo">
+  <h4>데모 4 · 입력 열이 붙은 어텐션</h4>
+  <p class="cap">슬롯 4개, F = 8, 헤드 2개. 입력 x는 “슬롯 k의 내용”과 무작위 벡터를 섞어 만듭니다(x = α·m<sub>k</sub> + (1 − α)·z). 히트맵 오른쪽 끝, 점선 뒤의 열이 입력입니다. 아래 수치의 “Sonnet 방식”은 공개 구현처럼 [M; x] 전체(N + 1행)로 쿼리를 만들어 셀프 어텐션을 한 뒤 마지막 행을 버리는 계산입니다.</p>
+  <div class="ctrls">
+    <div class="ctrl"><label>입력이 닮은 슬롯 k <b id="d4kv"></b></label><input type="range" id="d4k" min="0" max="3" step="1" value="3"></div>
+    <div class="ctrl"><label>닮은 정도 α <b id="d4av"></b></label><input type="range" id="d4a" min="0" max="1" step="0.01" value="0.8"></div>
+  </div>
+  <div class="btns"><button type="button" id="d4new">입력 잡음 z 새로 뽑기</button></div>
+  <canvas id="d4cv" height="230"></canvas>
+  <div class="readout" id="d4out"></div>
+</div>
+<p>α를 올리면 슬롯 k와 비슷한 키를 보던 쿼리들이 입력 열도 함께 보기 시작합니다. 메모리가 이미 가진 것과 비슷한 입력이 어디로 들어갈지가 “메모리에 지금 무엇이 있는가”에 따라 정해진다는 뜻입니다. 3.2절 끝은 슬롯이 하나뿐일 때도 이 연산이 쓸모 있다고 짚습니다. 메모리가 벡터 하나여도 [m; x]에 대한 어텐션은 입력 중 무엇을 받아들일지를 지금 메모리 내용에 따라 고르고, LSTM이 게이트로 하는 일을 다른 단위로 하는 셈입니다. 9절의 언어 모델이 실제로 슬롯 하나짜리였습니다.</p>
+<p class="note">쿼리를 M에서만 만드는 식 (2)와 Sonnet의 “전부 셀프 어텐션 후 마지막 행 버리기”는 같은 값을 냅니다. 출력의 i번째 행은 i번째 쿼리에만 의존하므로, 입력 행이 낸 쿼리는 버려지는 마지막 출력 행에만 쓰입니다. 위 데모의 “최대 차이”가 0(또는 부동소수점 오차 수준)으로 나오는 것이 그 확인입니다.</p>
+
+<!-- ───────── 5 ───────── -->
+<h2 id="s5">5. LSTM 안에 넣기: MLP와 게이트 — 식 (3)~(9)</h2>
+<p>\(\widetilde M\)이 M과 같은 크기이니 매 스텝 M을 \(\widetilde M\)으로 바꾸기만 해도 순환 신경망이 됩니다. 저자들은 대신 이 갱신을 LSTM 안에 넣었습니다. M을 “2차원 LSTM의 셀 상태 행렬”로 보고, 각 행 m<sub>i</sub>를 LSTM 셀 상태처럼 다룹니다.</p>
+<div class="eq">
+  $$\begin{aligned}
+  f_{i,t} &= W^f x_t + U^f h_{i,t-1} + b^f \qquad i_{i,t} = W^i x_t + U^i h_{i,t-1} + b^i\\
+  m_{i,t} &= \sigma\big(f_{i,t} + \tilde b^f\big)\circ m_{i,t-1} + \sigma(i_{i,t})\circ \underbrace{g_\psi(\tilde m_{i,t})}_{\text{표준 LSTM과 다른 곳}}\\
+  h_{i,t} &= \sigma(o_{i,t})\circ\tanh(m_{i,t})
+  \end{aligned}$$
+  <span class="note">식 (4)~(8)을 줄여 적음. 표준 LSTM이라면 밑줄 자리에 tanh(Wx + Uh + b)가 들어갑니다. RMC는 그 자리에 어텐션 결과 \(\tilde m_{i,t}\)를 g<sub>ψ</sub>로 처리한 값을 넣습니다. 논문은 g<sub>ψ</sub>로 “행(슬롯)별 MLP + LayerNorm이 가장 좋았다”고 적고, 출력 게이트는 실제로는 필요 없었다고 밝힙니다.</span>
+</div>
+<p>세부는 논문 각주가 가리키는 Sonnet 구현을 봐야 나옵니다. 한 스텝의 순서는 다음과 같습니다.</p>
+<div class="flow"><span>[M; x]</span><em>→ MHDPA →</em><span>+ 잔차, LayerNorm</span><em>→ 행별 MLP →</em><span>+ 잔차, LayerNorm</span><em>→ 입력 행 버림 →</em><span>\(\tilde m\)</span><em>→ 게이트 →</em><span>M<sub>t</sub></span></div>
+<div class="eq">
+  $$M_t = \sigma(\text{입력 게이트})\circ\tanh(\widetilde M) + \sigma(\text{망각 게이트} + 1)\circ M_{t-1}$$
+  <span class="note">Sonnet <code>relational_memory.py</code>. 게이트의 입력은 투영된 입력 x와 tanh(M<sub>t−1</sub>)이고, 망각 게이트 편향 기본값이 1.0, 입력 게이트 편향이 0.0입니다(식 (7)의 \(\tilde b^f\)). 출력은 M<sub>t</sub>를 펼친 벡터입니다.</span>
+</div>
+<p>게이트를 만드는 방식도 두 가지입니다. <strong>unit 게이팅</strong>은 LSTM처럼 원소마다 게이트를 하나씩 둡니다. <strong>memory 게이팅</strong>은 W<sup>f</sup>, U<sup>f</sup> 등을 행렬에서 벡터로 바꿔 <strong>슬롯마다 스칼라 게이트 하나</strong>를 둡니다. 슬롯을 통째로 지키거나 통째로 바꾸는 셈입니다.</p>
+
+<div class="demo">
+  <h4>데모 5 · 게이트가 정하는 기억의 수명</h4>
+  <p class="cap">원소 하나만 따라갑니다. t = 0에 어텐션·MLP가 후보값 \(\tilde m = 2\)를 내고(“쓰기”), 그 뒤로는 “한 번만 쓰기”면 후보 0, “계속 쓰기”면 매 스텝 같은 후보 2를 냅니다. 슬라이더는 게이트의 사전 활성값이고, 망각 게이트에는 Sonnet처럼 +1이 더해집니다. 점선은 망각 편향이 없을 때(+0)입니다.</p>
+  <div class="btns"><button type="button" id="d5once" aria-pressed="true">한 번만 쓰기</button><button type="button" id="d5keep">계속 쓰기</button></div>
+  <div class="ctrls">
+    <div class="ctrl"><label><span>입력 게이트 사전값 a<sub>i</sub></span> <b id="d5iv"></b></label><input type="range" id="d5i" min="-4" max="4" step="0.05" value="0"></div>
+    <div class="ctrl"><label><span>망각 게이트 사전값 a<sub>f</sub></span> <b id="d5fv"></b></label><input type="range" id="d5f" min="-4" max="4" step="0.05" value="0"></div>
+  </div>
+  <canvas id="d5cv" height="220"></canvas>
+  <div class="legend"><span><i style="background:var(--s1)"></i>m(t), 망각 편향 +1</span><span><i style="background:var(--muted)"></i>망각 편향 없음</span></div>
+  <div class="readout" id="d5out"></div>
+</div>
+<p>a<sub>f</sub> = 0에서 망각 게이트는 σ(1) ≈ 0.73입니다. 편향이 없으면 σ(0) = 0.5라 쓴 값이 매 스텝 절반으로 줄어 한 스텝 만에 반감되지만, +1 편향만으로 반감기가 2.2스텝으로 늘어납니다. 학습 초기부터 기억을 조금 더 오래 붙잡게 하려고 LSTM 구현에서 흔히 쓰는 요령(망각 게이트 편향을 1로 두기, Jozefowicz 외 2015)을 그대로 가져온 것입니다. “계속 쓰기”에서는 값이 \(\sigma(a_i)\tanh(2)/(1-\sigma(a_f+1))\)에 수렴합니다. 망각 게이트가 1에 가까우면 이 값이 크게 불어나는데, 매 스텝 어텐션 앞뒤의 LayerNorm이 \(\widetilde M\) 쪽은 정규화해 주지만 M<sub>t</sub> 자체는 게이트 합으로만 정해지기 때문입니다.</p>
+
+<!-- ───────── 6 ───────── -->
+<h2 id="s6">6. 슬롯 수, 슬롯 크기, 헤드 수</h2>
+<p>3.3절 끝의 관찰이 RMC 설계에서 가장 실용적인 부분입니다. W<sup>f</sup>, W<sup>i</sup>, U<sup>f</sup>, U<sup>i</sup>와 ψ, 그리고 어텐션의 W<sup>q</sup>, W<sup>k</sup>, W<sup>v</sup>는 <strong>모든 슬롯이 공유</strong>합니다. 그래서 슬롯 수를 바꿔도 파라미터 수는 그대로이고, 파라미터는 슬롯 하나의 크기에 따라 정해집니다. 전체 저장 용량(M의 원소 수)과 파라미터 수를 따로 조절할 수 있다는 뜻입니다. 저자들은 “어떤 과제는 더 많은(꼭 더 크지는 않은) 기억이, 언어 모델링 같은 과제는 더 적고 큰 기억이 필요했다”고 적습니다.</p>
+
+<div class="demo">
+  <h4>데모 6 · 파라미터 계산기</h4>
+  <p class="cap">Sonnet 구현의 층 구성(입력 투영, QKV 투영과 LayerNorm, 어텐션 뒤 LayerNorm, 행별 MLP, LayerNorm, 입력·망각 게이트)을 그대로 세었습니다. 어텐션 블록 1개, 키 크기 = 헤드 크기 기준이고 출력층은 뺐습니다. 슬롯 크기는 헤드 수 × 헤드 크기입니다.</p>
+  <div class="btns"><button type="button" id="d6p1">N번째로 먼 벡터 (8슬롯 · 2,048 units · 8헤드)</button><button type="button" id="d6p2">언어 모델 (1슬롯 · 2,500 units · 4헤드 · MLP 5층)</button></div>
+  <div class="ctrls">
+    <div class="ctrl"><label>슬롯 수 N <b id="d6nv"></b></label><input type="range" id="d6n" min="1" max="32" step="1" value="8"></div>
+    <div class="ctrl"><label>헤드 수 <b id="d6hv"></b></label><input type="range" id="d6h" min="1" max="16" step="1" value="8"></div>
+    <div class="ctrl"><label>헤드 크기 <b id="d6sv"></b></label><input type="range" id="d6s" min="4" max="640" step="1" value="32"></div>
+    <div class="ctrl"><label>MLP 층 수 <b id="d6lv"></b></label><input type="range" id="d6l" min="1" max="5" step="1" value="2"></div>
+    <div class="ctrl"><label>입력 차원 <b id="d6iv"></b></label><input type="range" id="d6i" min="8" max="512" step="1" value="40"></div>
+  </div>
+  <div class="btns"><button type="button" id="d6gu" aria-pressed="true">unit 게이팅</button><button type="button" id="d6gm">memory 게이팅</button></div>
+  <canvas id="d6cv" height="200"></canvas>
+  <div class="legend"><span><i style="background:var(--s1)"></i>파라미터 수</span><span><i style="background:var(--s2)"></i>메모리 원소 수 (N × 슬롯 크기)</span><span><i style="background:var(--s3)"></i>스텝당 어텐션 점수 수</span></div>
+  <div class="readout" id="d6out"></div>
+</div>
+<p>N 슬라이더를 움직이면 파란 선은 평평하고 주황 선(저장 용량)과 초록 선(어텐션 계산량, N(N + 1)에 비례)만 올라갑니다. 반대로 부록 A.1의 N번째로 먼 벡터 실험처럼 <strong>전체 원소 수를 2,048로 고정</strong>하면 슬롯을 늘릴수록 슬롯이 작아져 파라미터가 줄어듭니다. 헤드 8개, MLP 2층으로 계산하면 슬롯 1개(크기 2,048)는 약 3,787만 개, 8개(크기 256)는 약 60만 개, 16개(크기 128)는 약 16만 개입니다. 파라미터 대부분이 슬롯 크기의 제곱에 비례하는 층(QKV 투영, MLP, 게이트)에 있기 때문입니다. 저자들이 “슬롯이 많고 작은 모델이 적고 큰 모델보다 빨리 돈다”고 쓴 것도 같은 이유입니다. 언어 모델 설정을 누르면 코어만 약 7,600만 개이고, 그중 MLP 5층이 3,100만 개로 가장 큽니다.</p>
+
+<h3>모든 슬롯을 같은 값으로 시작하면</h3>
+<p>파라미터를 모든 슬롯이 공유하는 데는 함정이 하나 있습니다. 슬롯 두 개가 같은 값을 가지면 같은 쿼리·키·값을 만들고, 같은 어텐션 가중치를 받고, 같은 MLP와 게이트를 지나 다음 스텝에도 같은 값이 됩니다. 처음에 모든 슬롯이 같으면 <strong>영원히 같습니다</strong>. Sonnet 구현은 그래서 초기 메모리를 단위 행렬(슬롯 i의 i번째 성분만 1)로 둡니다. 코드 주석은 “메모리의 각 행이 서로 다르게 초기화되도록”이라고 이유를 적어 두었습니다.</p>
+<div class="demo">
+  <h4>데모 6b · 대칭은 깨지지 않는다</h4>
+  <p class="cap">슬롯 4개, 헤드 2개 × 크기 4인 RMC(무작위 가중치, 학습 없음)에 같은 무작위 입력 16스텝을 넣습니다. 위 그래프는 슬롯 쌍 사이 거리의 평균이고, 아래는 마지막 스텝의 메모리입니다. 실제로 식 (2)와 게이트를 매 스텝 계산합니다.</p>
+  <div class="btns"><button type="button" id="d6bi" aria-pressed="true">단위 행렬로 시작 (Sonnet)</button><button type="button" id="d6bz">모든 슬롯 0으로 시작</button><button type="button" id="d6bn">입력·가중치 새로 뽑기</button></div>
+  <canvas id="d6bcv" height="300"></canvas>
+  <div class="readout" id="d6bout"></div>
+</div>
+
+<!-- ───────── 7 ───────── -->
+<h2 id="s7">7. N번째로 먼 벡터</h2>
+<p>부록 A.1의 설정은 다음과 같습니다. 각 수열은 U(−1, 1)에서 뽑은 16차원 벡터 8개입니다. 벡터마다 1~8의 라벨이 비복원 추출로 붙는데, 라벨은 제시 순서와 무관합니다. 매 스텝 입력은 벡터, 라벨(원-핫 8), 그리고 그 수열의 질문 n과 m(각각 원-핫)을 이어 붙인 40차원입니다. 출력은 답 벡터의 라벨이고, softmax 교차 엔트로피로 학습합니다. 세 모델 모두 출력 앞에 256유닛 4층 MLP를 똑같이 붙였고, Adam, 배치 1,600을 썼습니다.</p>
+
+<h3>내적은 거리를 계산할 수 있다</h3>
+<p>어텐션 점수는 쿼리와 키의 내적입니다. 그런데 슬롯에 벡터 x와 함께 ‖x‖²와 1을 넣어 두면, 선형 투영 W<sup>q</sup>, W<sup>k</sup>만으로 내적이 정확히 거리의 제곱이 되게 배선할 수 있습니다.</p>
+<div class="eq">
+  $$k_j = \big[\,x_j,\ \lVert x_j\rVert^2,\ 1\,\big],\quad q_m = \big[-2x_m,\ 1,\ \lVert x_m\rVert^2\big]\quad\Rightarrow\quad q_m\cdot k_j = \lVert x_m - x_j\rVert^2$$
+  <span class="note">이 배선은 이 페이지가 설명을 위해 만든 것입니다. 학습된 RMC가 이렇게 계산한다는 뜻이 아닙니다. ‖x‖²는 슬롯별 MLP가 만들 수 있는 값이고, 핵심은 “슬롯 m의 쿼리와 슬롯 j의 키” 한 쌍이 그 둘의 관계 하나를 계산한다는 점입니다.</span>
+</div>
+<div class="demo">
+  <h4>데모 7 · 손으로 배선한 거리 어텐션</h4>
+  <p class="cap">점 6개(2차원)가 메모리 슬롯입니다. 점을 클릭하면 그 점이 m입니다. 점수는 β·q<sub>m</sub>·k<sub>j</sub>이고 β &gt; 0이면 먼 점에, β &lt; 0이면 가까운 점에 어텐션이 쏠립니다. 값 벡터는 각 점의 라벨(원-핫)이라 어텐션 결과가 곧 “어느 점을 가리키는가”입니다. n번째로 먼 점은 한 번의 어텐션으로는 고를 수 없어서, 여기서는 고른 점을 가리고 다시 어텐션하는 것을 n번 반복합니다.</p>
+  <div class="ctrls">
+    <div class="ctrl"><label>β <b id="d7bv"></b></label><input type="range" id="d7b" min="-20" max="20" step="0.1" value="8"></div>
+    <div class="ctrl"><label>n (가리고 다시 하기 횟수) <b id="d7nv"></b></label><input type="range" id="d7n" min="1" max="5" step="1" value="1"></div>
+  </div>
+  <div class="btns"><button type="button" id="d7new">새 점들</button></div>
+  <canvas id="d7cv" height="300"></canvas>
+  <div class="readout" id="d7out"></div>
+</div>
+<p>β를 키우면 어텐션이 가장 먼 점 하나로 모입니다. β가 작으면 여러 점에 퍼져 결과 라벨이 섞입니다. 이 과제가 단순한 저장·인출보다 어려운 이유도 보입니다. m이 아직 안 나왔으면 거리를 계산할 수 없으니, 모델은 벡터를 칸칸이 손상 없이 보관하다가 m이 나오는 순간 모든 쌍을 비교하고 <strong>정렬까지</strong> 해야 합니다.</p>
+
+<div class="demo">
+  <h4>데모 7b · 어텐션 한 층이 “가장 먼 점”을 배우게 하기</h4>
+  <p class="cap">위의 배선을 사람이 정하지 않고 학습시킵니다. 점 6개가 슬롯이고, 슬롯 m의 쿼리가 낸 어텐션 분포 자체를 “가장 먼 점” 6지선다의 예측으로 써서 교차 엔트로피로 W<sup>q</sup>, W<sup>k</sup>(각 4열)를 학습합니다. 슬롯에 무엇을 넣느냐만 다른 세 모델을 같은 데이터(배치 32, Adam, 학습률 0.01)로 1,500스텝 동시에 돌립니다. 자동미분까지 이 페이지 안의 JavaScript로 계산합니다.</p>
+  <div class="btns"><button type="button" id="d7go">▶ 학습 시작</button><button type="button" id="d7stop">■ 멈춤</button><button type="button" id="d7reset">처음부터</button></div>
+  <canvas id="d7lcv" height="220"></canvas>
+  <div class="legend"><span><i style="background:var(--s2)"></i>슬롯 = [x, 1]</span><span><i style="background:var(--s1)"></i>슬롯 = [x, ‖x‖², 1]</span><span><i style="background:var(--s3)"></i>슬롯 = 슬롯별 MLP([x, 1]) (은닉 16, 출력 4)</span><span><i style="background:var(--muted)"></i>찍기 1/6</span></div>
+  <div class="readout" id="d7lout"></div>
+  <canvas id="d7acv" height="180" style="margin-top:12px"></canvas>
+  <p class="cap" style="margin:6px 0 0">행은 쿼리 쪽(슬롯 m) 특징, 열은 키 쪽(슬롯 j) 특징입니다. 마지막 열(키 쪽 1)은 j와 무관한 항이라 소프트맥스에 영향이 없어 흐리게 그렸습니다.</p>
+</div>
+<p>스텝 1,500에서 세 모델의 정확도는 [x, 1]이 78%, [x, ‖x‖², 1]이 99%, MLP가 94%입니다(마지막 50스텝 평균, 시드를 고정해 두어 매번 같습니다). 따로 뽑은 2,000문제로 다시 재도 80%, 99%, 94%로 비슷합니다. 차이는 위 식에서 나옵니다. 거리 제곱 ‖x<sub>m</sub> − x<sub>j</sub>‖²를 j에 대해 펼치면 −2x<sub>m</sub>·x<sub>j</sub> + ‖x<sub>j</sub>‖² + (j와 무관한 상수)이고, [x, 1]만 있으면 내적으로 ‖x<sub>j</sub>‖² 항을 만들 수 없습니다. 이 모델은 “m과 반대 방향에 있는 점”으로 근사하는 데서 멈춥니다. ‖x‖²를 넣어 주면 거의 완벽해지고, 그 특징을 사람이 주지 않아도 <strong>슬롯별 MLP</strong>가 스스로 만들어 냅니다. RMC가 어텐션 뒤에 행별 MLP를 두는 이유 중 하나를 작게 보여 주는 예입니다. 아래 그림의 왼쪽은 학습된 W<sup>q</sup>(W<sup>k</sup>)<sup>⊤</sup>, 오른쪽은 손으로 배선한 행렬을 같은 눈금으로 맞춘 것입니다.</p>
+<h3>논문의 결과 (5.1절, 부록 그림 4·5)</h3>
+<ul>
+  <li>16차원 벡터에서 LSTM과 DNC는 최고 배치 정확도가 <strong>30%를 넘지 못했고</strong>, RMC는 학습이 끝날 때 꾸준히 <strong>91%</strong>에 도달했습니다. LSTM은 은닉 크기를 64부터 4,096까지, DNC는 메모리 수·크기·읽기/쓰기 헤드 수를 바꿔 봤지만 차이가 없었습니다.</li>
+  <li>32차원에서도 RMC는 비슷한 성능을 냈지만, 일부 시드와 설정에서만 그랬습니다.</li>
+  <li>슬롯 수의 효과가 뚜렷했습니다. 슬롯 8개나 16개가 1개보다 좋았습니다. 슬롯이 1개일 때는 헤드가 많을수록(8, 16) 좋았는데, 저자들은 이것을 “슬롯뿐 아니라 헤드 사이에서도 정보를 나누고 관계 지을 수 있다는 신호일 수 있다”고 해석합니다. 그래도 슬롯 1개는 어떤 헤드 수에서도 슬롯 여러 개보다 못했습니다(6절 논의).</li>
+  <li>어텐션 분석(그림 3): m이 나오기 전에는 입력을 한두 개 슬롯으로 옮기는 패턴이 보이고, m이 나온 뒤에는 모든 슬롯이 m이 쓰인 슬롯 쪽을 보는 쪽으로 바뀝니다. 다만 저자들 스스로 “어텐션 한 번만 지나도 메모리가 크게 섞이기 때문에 이 해석은 제한적”이라고 덧붙입니다.</li>
+</ul>
+
+<!-- ───────── 8 ───────── -->
+<h2 id="s8">8. 프로그램 평가와 강화학습</h2>
+<h3>프로그램 평가 (Learning to Execute)</h3>
+<p>Zaremba &amp; Sutskever(2014)의 Learning to Execute 데이터는 짧은 의사 코드를 글자 단위로 읽고 실행 결과를 글자 단위로 출력하는 과제입니다. 덧셈(addition), 제어문(control), 전체 프로그램(program) 세 범주가 있고, 입력을 재배열하기만 하는 기억 과제(copy, reverse, double)도 함께 평가했습니다. 저자들은 “기호 연산자는 피연산자 사이의 관계를 정의한다”는 점에서 이 과제도 관계 추론에 부담을 준다고 봤습니다. 샘플은 숫자 길이(literal length)와 중첩 깊이(nesting)로 난이도를 정하고, 출력이 숫자 길이를 넘지 않도록 나머지 연산을 씌웁니다.</p>
+<div class="demo">
+  <h4>데모 8 · Learning to Execute 형식의 문제 만들기</h4>
+  <p class="cap">논문 그림 2의 예시와 같은 형식을 흉내 낸 생성기입니다(원 데이터 생성기와 똑같지는 않습니다). 부록 A.2처럼 출력이 숫자 길이를 넘지 않게 마지막에 나머지 연산을 붙였습니다. 오른쪽 칸에 답을 적으면 표 1과 같은 “글자 단위 정확도”로 채점합니다. 표 1의 수치는 중첩 2, 숫자 길이 5에서 잰 값입니다.</p>
+  <div class="ctrls">
+    <div class="ctrl"><label>숫자 길이 <b id="d8lv"></b></label><input type="range" id="d8l" min="1" max="6" step="1" value="3"></div>
+    <div class="ctrl"><label>중첩 깊이 <b id="d8nv"></b></label><input type="range" id="d8n" min="1" max="3" step="1" value="2"></div>
+  </div>
+  <div class="btns"><button type="button" id="d8add">덧셈</button><button type="button" id="d8ctl">제어문</button><button type="button" id="d8prg" aria-pressed="true">전체 프로그램</button><button type="button" id="d8new">새 문제</button><button type="button" id="d8show">정답 보기</button></div>
+  <div class="split">
+    <div><h5>입력 (글자 수열)</h5><pre class="code" id="d8code"></pre></div>
+    <div><h5>내 답</h5><input type="text" id="d8ans" inputmode="numeric" autocomplete="off" placeholder="출력을 적어 보세요"><div class="readout" id="d8out"></div></div>
+  </div>
+</div>
+<div class="tw"><table>
+  <thead><tr><th>모델</th><th class="num">Add</th><th class="num">Control</th><th class="num">Program</th><th class="num">Copy</th><th class="num">Reverse</th><th class="num">Double</th></tr></thead>
+  <tbody id="t1"></tbody>
+</table></div>
+<p class="note">표 1. 테스트 글자 단위 정확도(%). 열마다 가장 높은 값을 굵게 표시했습니다. 차이가 가장 큰 곳은 전체 프로그램(RMC 79.0, LSTM 66.1)입니다. Double만 DNC(100.0)가 RMC(99.8)보다 근소하게 높습니다.</p>
+<p>표에 덧붙은 관찰이 두 가지 있습니다. 첫째, 학습 때 teacher forcing을 쓰지 않고 모델이 낸 이전 출력을 다음 입력으로 쓰는 쪽이 더 좋았습니다. 저자들은 프로그램이 정해지면 답이 하나뿐이라 출력 분포가 날카로운 단봉이기 때문일 것이라고 추측합니다. 둘째, 가장 좋은 LSTM은 가장 좋은 RMC보다 파라미터가 훨씬 많았습니다(부록 A.2).</p>
+
+<h3>Mini PacMan과 BoxWorld</h3>
+<p>Mini PacMan은 미로에서 유령을 피해 먹이를 모으는 게임입니다. 저자들은 에이전트 주변 <strong>5 × 5 창(viewport)</strong>만 보이게 바꿨습니다. 이러면 유령의 움직임과 이미 먹은 먹이의 위치를 기억 속에서 추론해야 합니다. 결과는 viewport에서 RMC 677점, LSTM 550점이었고, 전체 화면을 보여 줄 때는 1,159점과 598점으로 거의 두 배였습니다(5.3절).</p>
+<p>BoxWorld(부록 A.3)는 관계 추론을 더 노골적으로 요구합니다. 14 × 14 격자에 혼자 놓인 픽셀은 주울 수 있는 열쇠이고, 두 칸짜리 상자는 오른쪽이 자물쇠 색, 왼쪽이 그 자물쇠를 열면 얻는 열쇠 색입니다. 열쇠는 한 번에 하나만 들 수 있고 쓰면 사라집니다. 막다른 길로 가는 상자(방해 가지)를 열면 그 판이 끝납니다. 상자 위치가 무작위라 공간적 단서가 없고, 5 × 5 viewport로 보면서 본 상자들의 열쇠–자물쇠 관계를 기억 속에 이어 붙여야 보석까지 갈 수 있습니다.</p>
+<div class="demo">
+  <h4>데모 9 · BoxWorld를 viewport로 풀어 보기</h4>
+  <p class="cap">부록 A.3의 규칙대로 만든 판입니다. 정답 경로 길이와 방해 가지 수를 고르고, 방향 버튼이나 키보드 화살표로 움직입니다. 보상은 정답 상자 +1, 방해 상자 −1(즉시 종료), 보석 +10입니다. 오른쪽 목록은 지금까지 viewport 안에 들어왔던 상자들, 에이전트가 기억해야 하는 것입니다. 논문에서 viewport에 덧붙이는 “들고 있는 열쇠” 프레임은 아래 수치로 보여 줍니다.</p>
+  <div class="ctrls">
+    <div class="ctrl"><label>정답 경로 길이 <b id="d9lv"></b></label><input type="range" id="d9l" min="1" max="5" step="1" value="3"></div>
+    <div class="ctrl"><label>방해 가지 수 <b id="d9dv"></b></label><input type="range" id="d9d" min="0" max="5" step="1" value="3"></div>
+  </div>
+  <div class="btns"><button type="button" id="d9new">새 판</button><button type="button" id="d9vp" aria-pressed="true">viewport만 보기</button><button type="button" id="d9graph">숨은 그래프 보기</button></div>
+  <div class="bw">
+    <canvas id="d9cv" height="330"></canvas>
+    <div class="bwside">
+      <div class="pad"><span></span><button type="button" data-mv="0,-1">↑</button><span></span><button type="button" data-mv="-1,0">←</button><button type="button" data-mv="0,1">↓</button><button type="button" data-mv="1,0">→</button></div>
+      <div class="seen" id="d9seen"></div>
+    </div>
+  </div>
+  <div class="readout" id="d9out"></div>
+</div>
+<p>논문에서는 viewport를 2층 합성곱으로 처리한 뒤 x, y 위치 태그를 붙여 RMC(슬롯 4개, 헤드 4개, 전체 1,024)에 넣었고, IMPALA 방식의 actor-critic으로 학습했습니다. 정답 경로 1~5, 방해 가지 0~5 판에서 RMC 에이전트는 10<sup>9</sup>스텝 뒤 <strong>98%</strong>의 판을 풀었고, 같은 자리에 ConvLSTM을 넣은 에이전트는 <strong>73%</strong>였습니다.</p>
+
+<!-- ───────── 9 ───────── -->
+<h2 id="s9">9. 언어 모델링</h2>
+<p>마지막 실험은 단어 단위 언어 모델입니다. WikiText-103(학습 토큰 약 1억), Project Gutenberg 책(1.8억), GigaWord v5 뉴스(40억)를 같은 방식으로 처리했고 어휘는 셋 다 약 25만 개입니다. 부록 A.4에 따르면 선택된 설정은 전체 2,500 units, 헤드 4개, <strong>슬롯 1개</strong>, MLP 5층, 어텐션 블록 1개입니다. WikiText-103 검증 오차로 고른 뒤 나머지 두 데이터에는 비용 때문에 다시 탐색하지 않고 그대로 썼습니다. 단어 임베딩 512(드롭아웃 0.5)를 출력 softmax와 묶었고, BPTT는 100스텝으로 잘랐습니다.</p>
+<div class="demo">
+  <h4>데모 10 · 퍼플렉시티 비교 (표 2, 표 3)</h4>
+  <p class="cap">퍼플렉시티는 exp(단어당 교차 엔트로피)입니다. 31.6이면 매 단어 약 32개 후보 중 하나를 고르는 만큼 불확실하다는 뜻이고 낮을수록 좋습니다. 막대 옆 숫자는 표의 값이고, 아래의 차이와 상대 개선은 이 페이지가 계산한 값입니다.</p>
+  <div class="btns"><button type="button" id="d10a" aria-pressed="true">WikiText-103 (test)</button><button type="button" id="d10b">Gutenberg (test)</button><button type="button" id="d10c">GigaWord (test)</button><button type="button" id="d10d">GigaWord 단어 빈도별 (표 3)</button></div>
+  <canvas id="d10cv" height="250"></canvas>
+  <div class="readout" id="d10out"></div>
+</div>
+<p>세 데이터 모두에서 RMC가 가장 낮았고, 논문은 “기존 최고 결과보다 1.4~5.4 낮다”고 요약합니다. WikiText-103 테스트에서는 Quasi-RNN 33 → 31.6(1.4), GigaWord에서는 LSTM 43.7 → 38.3(5.4)입니다. 논문은 이를 상대 개선 5~12%라고 적는데, 직접 계산하면 WikiText-103의 Quasi-RNN 대비 개선은 4.2%라 하한이 조금 어긋납니다. 같은 행의 LSTM [32] 대비로는 7.9%입니다.</p>
+<p>표 3을 보면 개선이 어디서 왔는지가 드러납니다. 학습 데이터에 1만 번 넘게 나온 흔한 단어에서 RMC는 28.3으로 LSTM(39.4)과 Hebbian softmax LSTM(33.2)보다 훨씬 낮습니다. 반면 1,000번 미만의 드문 단어에서는 <strong>6.9 × 10<sup>4</sup>로 LSTM(3.7 × 10<sup>4</sup>)보다 나쁩니다</strong>. 그림 12에서도 비슷한 경향이 보입니다. 테스트 때 문맥을 100단어로 끊어도 RMC의 퍼플렉시티는 약 1 오르고 LSTM은 약 5 오릅니다. 저자들은 RMC가 짧은 범위의 관계를 잘 잡아 가까운 문맥만으로도 충분했을 것이라고 해석합니다.</p>
+<p class="note">언어 모델은 슬롯이 하나였습니다. 그러니 이 결과는 “슬롯끼리 대화한다”는 RMC의 핵심 장치를 검증한 것이 아닙니다. 슬롯 하나와 입력 하나, 즉 [m; x] 두 행 위의 4헤드 어텐션 + 큰 MLP의 효과입니다. 저자들도 슬롯 1개를 고른 이유가 언어 모델에 파라미터가 많이 필요했고, 파라미터가 많으면서 슬롯도 여러 개인 모델은 빨리 돌릴 수 없었기 때문이라고 밝힙니다. “언어 모델링에 슬롯 하나가 최선이라고 주장하지는 않는다”는 단서도 붙였습니다(6절).</p>
+
+<!-- ───────── 10 ───────── -->
+<h2 id="s10">10. 한계와 그다음</h2>
+<p><strong>왜 좋아졌는지는 모른다.</strong> 6절의 논의는 꽤 솔직합니다. 설계는 “기억끼리 상호작용하게 하면 관계 추론이 쉬워질 것”이라는 직관에서 나왔고 N번째로 먼 벡터의 어텐션 분석도 그 직관과 맞았지만, 저자들은 “설계 선택이 관계 추론 능력에 인과적으로 영향을 줬다거나, 모델 안에서 일어나는 계산이 관계 추론에 대한 전통적인 생각과 어떻게 대응하는지 구체적으로 주장할 수 없다”고 적습니다. 결과는 “기능이 나아졌다는 증거”로 봐 달라는 것입니다. 관계 추론이 필요한 과제를 더 잘 푸니 관계 추론 능력이 늘었다고 말할 수는 있어도, 그 능력이 정확히 어디서 왔는지는 모른다는 뜻입니다.</p>
+<p><strong>슬롯과 헤드의 관계도 아직 모른다.</strong> 메모리를 행으로 자르면 슬롯, 열로 자르면 헤드입니다. 슬롯은 파라미터를 공유하고, 헤드와 큰 슬롯은 파라미터를 더 씁니다. 과제마다 좋은 비율이 달랐습니다. N번째로 먼 벡터는 슬롯이 많아야 했고, 언어 모델은 슬롯 하나였고, 프로그램 평가는 중간(슬롯 4개, 헤드 4개)이 고르게 좋았지만 하위 과제에 따라 1개나 8개가 가장 좋기도 했습니다.</p>
+<p><strong>고정된 메모리는 무엇을 버릴지 골라야 한다.</strong> 저자들은 과거 상태를 전부 쌓아 두고 보는 모델(Bahdanau 어텐션, Transformer)과 RMC를 대비합니다. 앞쪽은 시간적으로 가까운 것에 치우치지 않고 먼 상호작용을 잘 잡지만, 스텝 수가 크거나 끝이 없는 온라인 강화학습에서는 버퍼 크기, 롤링 윈도, 계산 캐시를 어떻게 할지가 문제가 됩니다. RMC는 반대로 메모리가 고정이라 비용은 일정하지만, 슬롯 N개에 들어가지 않는 것은 잃습니다.</p>
+
+<div class="demo">
+  <h4>데모 11 · 시간이 길어질 때의 비용</h4>
+  <p class="cap">RMC는 매 스텝 N × (N + 1)개의 어텐션 점수를 계산하고 메모리는 N개 슬롯 그대로입니다. 과거 상태를 전부 쌓는 Transformer식 버퍼는 t번째 스텝에 t개 키를 보고 메모리도 t개로 늘어납니다. 세로축은 로그 눈금이고 헤드 1개, 층 1개 기준입니다.</p>
+  <div class="ctrls">
+    <div class="ctrl"><label>RMC 슬롯 수 N <b id="d11nv"></b></label><input type="range" id="d11n" min="1" max="32" step="1" value="8"></div>
+    <div class="ctrl"><label>수열 길이 T <b id="d11tv"></b></label><input type="range" id="d11t" min="0" max="100" step="0.5" value="60"></div>
+  </div>
+  <canvas id="d11cv" height="220"></canvas>
+  <div class="legend"><span><i style="background:var(--s1)"></i>RMC 누적 점수</span><span><i style="background:var(--s2)"></i>버퍼 어텐션 누적 점수</span></div>
+  <div class="readout" id="d11out"></div>
+</div>
+<p>저자들은 이 둘을 섞는 방향을 제안합니다. “일정 구간은 기억을 손실 없이 쌓다가, 다음 구간으로 넘어가기 전에 순환 코어 안으로 압축하는” 방식입니다. 같은 DeepMind 그룹(Rae 외)의 Compressive Transformer(2019)가 오래된 기억을 압축 메모리로 옮기는 비슷한 생각을 Transformer 쪽에서 구현했습니다. 이후 언어 모델의 주류는 RMC 같은 고정 메모리 순환 코어가 아니라 버퍼를 키우는 Transformer 쪽으로 갔습니다. 하지만 “기억 칸끼리 어텐션으로 대화하게 한다”는 생각은 이 논문의 저자 일부가 같은 해 낸 관계형 심층 강화학습(Zambaldi 외 2018, BoxWorld의 출처)과 함께, 어텐션을 개체 사이의 관계 계산기로 쓰는 흐름의 한 축이 됐습니다.</p>
+<p>같은 시리즈의 <a href="https://dev-jonghoonpark.github.io/how-ntm-works/">How Neural Turing Machines Work</a>는 RMC가 비판하는 “칸은 나뉘지만 서로 대화하지 않는” 메모리를, <a href="https://dev-jonghoonpark.github.io/how-lstm-works/">How LSTM Works</a>는 식 (7)이 빌린 게이트를, <a href="https://dev-jonghoonpark.github.io/how-attention-works/">How Attention Works</a>는 식 (1)의 Q·K·V를 다룹니다.</p>
+
+<!-- ───────── 11 ───────── -->
+<h2 id="s11">11. 확인 퀴즈</h2>
+<div id="quiz"></div>
+<p class="quiz-score" id="quizScore"></p>
+
+<footer>
+<p><strong>참고 문헌</strong></p>
+<ul class="refs">
+<li>Santoro, Faulkner, Raposo 외 (2018), <em>Relational recurrent neural networks</em>, NeurIPS 2018 — <a href="https://arxiv.org/abs/1806.01822" target="_blank" rel="noopener">arXiv:1806.01822</a></li>
+<li>DeepMind Sonnet, <code>relational_memory.py</code> — <a href="https://github.com/deepmind/sonnet/blob/v1/sonnet/python/modules/relational_memory.py" target="_blank" rel="noopener">GitHub</a> (논문 각주 2가 가리키는 구현)</li>
+<li>Vaswani 외 (2017), <em>Attention Is All You Need</em> — <a href="https://arxiv.org/abs/1706.03762" target="_blank" rel="noopener">arXiv:1706.03762</a></li>
+<li>Graves, Wayne &amp; Danihelka (2014), <em>Neural Turing Machines</em> — <a href="https://arxiv.org/abs/1410.5401" target="_blank" rel="noopener">arXiv:1410.5401</a></li>
+<li>Zaremba &amp; Sutskever (2014), <em>Learning to Execute</em> — <a href="https://arxiv.org/abs/1410.4615" target="_blank" rel="noopener">arXiv:1410.4615</a></li>
+<li>Zambaldi 외 (2018), <em>Relational Deep Reinforcement Learning</em> — <a href="https://arxiv.org/abs/1806.01830" target="_blank" rel="noopener">arXiv:1806.01830</a></li>
+<li>Rae 외 (2019), <em>Compressive Transformers for Long-Range Sequence Modelling</em> — <a href="https://arxiv.org/abs/1911.05507" target="_blank" rel="noopener">arXiv:1911.05507</a></li>
+</ul>
+<p style="margin-top:18px"><a href="https://github.com/dev-jonghoonpark/how-ai-works">how-ai-works</a> 시리즈 · 모든 계산은 브라우저에서 실시간으로 이루어집니다.</p>
+</footer>
+</div>
+
+<script>
+var $=function(s){return document.querySelector(s);};
+var cssCache={};
+function css(v){return v in cssCache?cssCache[v]:(cssCache[v]=getComputedStyle(document.documentElement).getPropertyValue(v).trim());}
+/* 모바일에서 캔버스 버퍼를 매번 새로 잡으면 메모리가 쌓여 탭이 죽는다.
+   크기가 같으면 기존 버퍼를 재사용하고, dpr은 2로 제한한다.
+   cv.height에 대입하면 height 속성도 바뀌므로 논리 높이는 data-h에 따로 둔다. */
+function setup(cv){
+  if(!cv.dataset.h)cv.dataset.h=cv.getAttribute('height');
+  var dpr=Math.min(2,window.devicePixelRatio||1), w=cv.clientWidth, h=+cv.dataset.h;
+  var bw=Math.round(w*dpr), bh=Math.round(h*dpr);
+  if(cv.width!==bw||cv.height!==bh){cv.width=bw;cv.height=bh;}
+  cv.style.height=h+'px';
+  var c=cv.getContext('2d'); c.setTransform(dpr,0,0,dpr,0,0);
+  c.clearRect(0,0,w,h);
+  return {c:c,w:w,h:h};
+}
+function onFrame(fn){var q=false;return function(){if(q)return;q=true;requestAnimationFrame(function(){q=false;fn();});};}
+function hexA(hex,a){var n=parseInt(hex.slice(1),16);return 'rgba('+((n>>16)&255)+','+((n>>8)&255)+','+(n&255)+','+a+')';}
+function rng(seed){return function(){seed|=0;seed=seed+0x6D2B79F5|0;var t=Math.imul(seed^seed>>>15,1|seed);t=t+Math.imul(t^t>>>7,61|t)^t;return((t^t>>>14)>>>0)/4294967296;};}
+function gauss(r){var u=1-r(),v=r();return Math.sqrt(-2*Math.log(u))*Math.cos(2*Math.PI*v);}
+function fmt(x,d){return (+x).toFixed(d==null?2:d);}
+function fmtInt(n){return Math.round(n).toLocaleString('en-US');}
+function cl(x,a,b){return Math.max(a,Math.min(b,x));}
+function cellColor(v){return v>=0?hexA(css('--s1'),cl(v,0,1)*0.85):hexA(css('--s2'),cl(-v,0,1)*0.85);}
+function heat(v){return hexA(css('--s1'),0.06+0.94*cl(v,0,1));}
+function pressed(ids,on){ids.forEach(function(id){$(id).setAttribute('aria-pressed',id===on?'true':'false');});}
+function softmax(a){var m=Math.max.apply(null,a),e=a.map(function(x){return Math.exp(x-m);}),s=e.reduce(function(p,q){return p+q;},0);return e.map(function(x){return x/s;});}
+function randMat(r,n,m,s){var M=[];for(var i=0;i<n;i++){var row=[];for(var j=0;j<m;j++)row.push((r()*2-1)*s);M.push(row);}return M;}
+function mm(A,B){return A.map(function(row){var o=new Array(B[0].length).fill(0);for(var p=0;p<row.length;p++)for(var j=0;j<o.length;j++)o[j]+=row[p]*B[p][j];return o;});}
+function dot(a,b){var s=0;for(var i=0;i<a.length;i++)s+=a[i]*b[i];return s;}
+/* 식 (1)/(2): 쿼리 행렬 Mq, 키·값 행렬 Mkv, 헤드별 W */
+function mhdpa(Mq,Mkv,W){
+  var out=Mq.map(function(){return [];}),att=[];
+  W.forEach(function(w){var Q=mm(Mq,w.q),K=mm(Mkv,w.k),V=mm(Mkv,w.v),dk=w.q[0].length;
+    var A=Q.map(function(q){return softmax(K.map(function(k){return dot(q,k)/Math.sqrt(dk);}));});att.push(A);
+    A.forEach(function(a,i){for(var j=0;j<V[0].length;j++){var s=0;for(var t=0;t<a.length;t++)s+=a[t]*V[t][j];out[i].push(s);}});});
+  return {out:out,att:att};
+}
+function drawGrid(c,M,x,y,cw,ch,colorFn){for(var i=0;i<M.length;i++)for(var j=0;j<M[i].length;j++){c.fillStyle=colorFn(M[i][j]);c.fillRect(x+j*cw+0.5,y+i*ch+0.5,cw-1,ch-1);}}
+
+/* ══════ 자동미분 + RMC ══════ */
+/* 작은 행렬 자동미분 + RMC / LSTM (브라우저·node 공용) */
+var AD=(function(){
+var tape=[];
+function T(r,c,v){this.r=r;this.c=c;this.v=v||new Float64Array(r*c);this.g=null;this.back=null;}
+function mk(r,c,v){return new T(r,c,v);}
+function G(t){if(!t.g)t.g=new Float64Array(t.r*t.c);return t.g;}
+function rec(o,parents,fn){o.back=fn;tape.push(o);return o;}
+function matmul(A,B){var r=A.r,k=A.c,c=B.c,o=mk(r,c),av=A.v,bv=B.v,ov=o.v;
+  for(var i=0;i<r;i++)for(var p=0;p<k;p++){var a=av[i*k+p];if(a===0)continue;var bo=p*c,oo=i*c;for(var j=0;j<c;j++)ov[oo+j]+=a*bv[bo+j];}
+  return rec(o,[A,B],function(){var og=o.g,ag=G(A),bg=G(B);
+    for(var i=0;i<r;i++)for(var p=0;p<k;p++){var s=0,a=av[i*k+p],bo=p*c,oo=i*c;for(var j=0;j<c;j++){s+=og[oo+j]*bv[bo+j];bg[bo+j]+=a*og[oo+j];}ag[i*k+p]+=s;}});}
+/* A · Bᵀ */
+function matmulT(A,B){var r=A.r,k=A.c,c=B.r,o=mk(r,c),av=A.v,bv=B.v,ov=o.v;
+  for(var i=0;i<r;i++)for(var j=0;j<c;j++){var s=0;for(var p=0;p<k;p++)s+=av[i*k+p]*bv[j*k+p];ov[i*c+j]=s;}
+  return rec(o,[A,B],function(){var og=o.g,ag=G(A),bg=G(B);
+    for(var i=0;i<r;i++)for(var j=0;j<c;j++){var g=og[i*c+j];if(g===0)continue;for(var p=0;p<k;p++){ag[i*k+p]+=g*bv[j*k+p];bg[j*k+p]+=g*av[i*k+p];}}});}
+/* B가 1행이면 행마다 브로드캐스트 */
+function add(A,B){var o=mk(A.r,A.c),n=A.v.length,bc=B.r===1&&A.r>1,c=A.c;
+  for(var i=0;i<n;i++)o.v[i]=A.v[i]+(bc?B.v[i%c]:B.v[i]);
+  return rec(o,[A,B],function(){var ag=G(A),bg=G(B);for(var i=0;i<n;i++){ag[i]+=o.g[i];bg[bc?i%c:i]+=o.g[i];}});}
+function mul(A,B){var o=mk(A.r,A.c),n=A.v.length;for(var i=0;i<n;i++)o.v[i]=A.v[i]*B.v[i];
+  return rec(o,[A,B],function(){var ag=G(A),bg=G(B);for(var i=0;i<n;i++){ag[i]+=o.g[i]*B.v[i];bg[i]+=o.g[i]*A.v[i];}});}
+function scale(A,s){var o=mk(A.r,A.c),n=A.v.length;for(var i=0;i<n;i++)o.v[i]=A.v[i]*s;
+  return rec(o,[A],function(){var ag=G(A);for(var i=0;i<n;i++)ag[i]+=o.g[i]*s;});}
+function unary(f,df){return function(A){var o=mk(A.r,A.c),n=A.v.length;for(var i=0;i<n;i++)o.v[i]=f(A.v[i]);
+  return rec(o,[A],function(){var ag=G(A);for(var i=0;i<n;i++)ag[i]+=o.g[i]*df(o.v[i],A.v[i]);});};}
+var sigmoid=unary(function(x){return 1/(1+Math.exp(-x));},function(y){return y*(1-y);});
+var tanh=unary(Math.tanh,function(y){return 1-y*y;});
+var relu=unary(function(x){return x>0?x:0;},function(y,x){return x>0?1:0;});
+function addConst(A,s){var o=mk(A.r,A.c),n=A.v.length;for(var i=0;i<n;i++)o.v[i]=A.v[i]+s;
+  return rec(o,[A],function(){var ag=G(A);for(var i=0;i<n;i++)ag[i]+=o.g[i];});}
+function softmaxRows(A){var r=A.r,c=A.c,o=mk(r,c);
+  for(var i=0;i<r;i++){var m=-1e300;for(var j=0;j<c;j++)m=Math.max(m,A.v[i*c+j]);var s=0;
+    for(j=0;j<c;j++){var e=Math.exp(A.v[i*c+j]-m);o.v[i*c+j]=e;s+=e;}for(j=0;j<c;j++)o.v[i*c+j]/=s;}
+  return rec(o,[A],function(){var ag=G(A);for(var i=0;i<r;i++){var d=0;for(var j=0;j<c;j++)d+=o.g[i*c+j]*o.v[i*c+j];
+    for(j=0;j<c;j++)ag[i*c+j]+=o.v[i*c+j]*(o.g[i*c+j]-d);}});}
+function concatRows(A,B){var o=mk(A.r+B.r,A.c);o.v.set(A.v,0);o.v.set(B.v,A.v.length);
+  return rec(o,[A,B],function(){var ag=G(A),bg=G(B),n=A.v.length;for(var i=0;i<n;i++)ag[i]+=o.g[i];for(i=0;i<B.v.length;i++)bg[i]+=o.g[n+i];});}
+function sliceRows(A,a,b){var c=A.c,o=mk(b-a,c);o.v.set(A.v.subarray(a*c,b*c));
+  return rec(o,[A],function(){var ag=G(A);for(var i=0;i<o.v.length;i++)ag[a*c+i]+=o.g[i];});}
+function concatCols(list){var r=list[0].r,c=0;list.forEach(function(t){c+=t.c;});var o=mk(r,c),off=0;
+  list.forEach(function(t){for(var i=0;i<r;i++)for(var j=0;j<t.c;j++)o.v[i*c+off+j]=t.v[i*t.c+j];off+=t.c;});
+  return rec(o,list,function(){var off=0;list.forEach(function(t){var tg=G(t);for(var i=0;i<r;i++)for(var j=0;j<t.c;j++)tg[i*t.c+j]+=o.g[i*c+off+j];off+=t.c;});});}
+function sliceCols(A,a,b){var r=A.r,c=A.c,w=b-a,o=mk(r,w);for(var i=0;i<r;i++)for(var j=0;j<w;j++)o.v[i*w+j]=A.v[i*c+a+j];
+  return rec(o,[A],function(){var ag=G(A);for(var i=0;i<r;i++)for(var j=0;j<w;j++)ag[i*c+a+j]+=o.g[i*w+j];});}
+function flatten(A){var o=mk(1,A.r*A.c,A.v.slice());return rec(o,[A],function(){var ag=G(A);for(var i=0;i<ag.length;i++)ag[i]+=o.g[i];});}
+/* 행별 LayerNorm (gain·bias 없이) */
+function layerNorm(A){var r=A.r,c=A.c,o=mk(r,c),inv=new Float64Array(r);
+  for(var i=0;i<r;i++){var m=0;for(var j=0;j<c;j++)m+=A.v[i*c+j];m/=c;var s=0;for(j=0;j<c;j++){var d=A.v[i*c+j]-m;s+=d*d;}
+    inv[i]=1/Math.sqrt(s/c+1e-5);for(j=0;j<c;j++)o.v[i*c+j]=(A.v[i*c+j]-m)*inv[i];}
+  return rec(o,[A],function(){var ag=G(A);for(var i=0;i<r;i++){var mg=0,mgy=0;for(var j=0;j<c;j++){mg+=o.g[i*c+j];mgy+=o.g[i*c+j]*o.v[i*c+j];}mg/=c;mgy/=c;
+    for(j=0;j<c;j++)ag[i*c+j]+=inv[i]*(o.g[i*c+j]-mg-o.v[i*c+j]*mgy);}});}
+/* 소프트맥스 교차 엔트로피, 1행 로짓 */
+function xent(L,y){var c=L.c,m=-1e300;for(var j=0;j<c;j++)m=Math.max(m,L.v[j]);var s=0,p=new Float64Array(c);
+  for(j=0;j<c;j++){p[j]=Math.exp(L.v[j]-m);s+=p[j];}for(j=0;j<c;j++)p[j]/=s;
+  var o=mk(1,1);o.v[0]=-Math.log(p[y]+1e-12);o.p=p;
+  return rec(o,[L],function(){var lg=G(L);for(var j=0;j<c;j++)lg[j]+=o.g[0]*(p[j]-(j===y?1:0));});}
+function backward(loss){loss.g=new Float64Array(1);loss.g[0]=1;for(var i=tape.length-1;i>=0;i--){var t=tape[i];if(t.g&&t.back)t.back();}tape=[];}
+function clear(){tape=[];}
+function param(r,c,rnd,s){var t=mk(r,c);if(rnd)for(var i=0;i<t.v.length;i++)t.v[i]=(rnd()*2-1)*s;t.isP=true;return t;}
+function Adam(params,lr){this.p=params;this.lr=lr;this.t=0;this.m=params.map(function(p){return new Float64Array(p.v.length);});this.s=params.map(function(p){return new Float64Array(p.v.length);});}
+Adam.prototype.step=function(scaleG){this.t++;var b1=0.9,b2=0.999,lr=this.lr,t=this.t,self=this;
+  /* 전역 L2 클리핑 */
+  var nrm=0;this.p.forEach(function(p){if(p.g)for(var i=0;i<p.g.length;i++)nrm+=p.g[i]*p.g[i]*scaleG*scaleG;});nrm=Math.sqrt(nrm);var cf=nrm>5?5/nrm:1;
+  this.p.forEach(function(p,k){if(!p.g)return;var m=self.m[k],s=self.s[k];
+    for(var i=0;i<p.v.length;i++){var g=p.g[i]*scaleG*cf;m[i]=b1*m[i]+(1-b1)*g;s[i]=b2*s[i]+(1-b2)*g*g;
+      p.v[i]-=lr*(m[i]/(1-Math.pow(b1,t)))/(Math.sqrt(s[i]/(1-Math.pow(b2,t)))+1e-8);}p.g=null;});};
+return {mk:mk,matmul:matmul,matmulT:matmulT,add:add,mul:mul,scale:scale,sigmoid:sigmoid,tanh:tanh,relu:relu,addConst:addConst,
+  softmaxRows:softmaxRows,concatRows:concatRows,sliceRows:sliceRows,sliceCols:sliceCols,concatCols:concatCols,flatten:flatten,layerNorm:layerNorm,
+  xent:xent,backward:backward,clear:clear,param:param,Adam:Adam};
+})();
+
+/* RMC: N 슬롯, 헤드 H, 헤드 크기 hs → 슬롯 크기 ms = H·hs */
+function RMC(cfg,rnd){var A=AD,ms=cfg.H*cfg.hs,D=cfg.D,s=function(fi){return Math.sqrt(1/fi)*1.7;};
+  this.cfg=cfg;this.ms=ms;var P=this.P=[];function p(r,c){var t=A.param(r,c,rnd,s(r));P.push(t);return t;}
+  function b(c,v){var t=A.param(1,c);if(v)for(var i=0;i<c;i++)t.v[i]=v;P.push(t);return t;}
+  this.Win=p(D,ms);this.bin=b(ms);
+  this.Wq=[];this.Wk=[];this.Wv=[];for(var h=0;h<cfg.H;h++){this.Wq.push(p(ms,cfg.hs));this.Wk.push(p(ms,cfg.hs));this.Wv.push(p(ms,cfg.hs));}
+  this.W1=p(ms,ms);this.b1=b(ms);this.W2=p(ms,ms);this.b2=b(ms);
+  this.Wi=p(ms,ms);this.Ui=p(ms,ms);this.bi=b(ms);this.Wf=p(ms,ms);this.Uf=p(ms,ms);this.bf=b(ms);
+  this.Wo1=p(cfg.N*ms,cfg.Hout);this.bo1=b(cfg.Hout);this.Wo2=p(cfg.Hout,cfg.C);this.bo2=b(cfg.C);}
+RMC.prototype.init=function(){var N=this.cfg.N,ms=this.ms,M=AD.mk(N,ms);for(var i=0;i<N;i++)if(i<ms)M.v[i*ms+i]=1;return M;};
+RMC.prototype.step=function(M,x,keep){var A=AD,cfg=this.cfg,N=cfg.N,self=this;
+  var xe=A.add(A.matmul(x,this.Win),this.bin);
+  var Mx=A.concatRows(M,xe);
+  var heads=[],att=[];
+  for(var h=0;h<cfg.H;h++){var Q=A.matmul(M,this.Wq[h]),K=A.matmul(Mx,this.Wk[h]),V=A.matmul(Mx,this.Wv[h]);
+    var W=A.softmaxRows(A.scale(A.matmulT(Q,K),1/Math.sqrt(cfg.hs)));att.push(W.v.slice());heads.push(A.matmul(W,V));}
+  var Mt=A.layerNorm(A.add(M,A.concatCols(heads)));
+  var mlp=A.add(A.matmul(A.relu(A.add(A.matmul(Mt,this.W1),this.b1)),this.W2),this.b2);
+  var M2=A.layerNorm(A.add(Mt,mlp));
+  var tm=A.tanh(M);
+  var ig=A.sigmoid(A.add(A.add(A.matmul(tm,this.Ui),A.matmul(xe,this.Wi)),this.bi));
+  var fg=A.sigmoid(A.addConst(A.add(A.add(A.matmul(tm,this.Uf),A.matmul(xe,this.Wf)),this.bf),1));
+  var Mn=A.add(A.mul(ig,A.tanh(M2)),A.mul(fg,M));
+  if(keep)keep.push(att);
+  return Mn;};
+RMC.prototype.out=function(M){var A=AD;return A.add(A.matmul(A.relu(A.add(A.matmul(A.flatten(M),this.Wo1),this.bo1)),this.Wo2),this.bo2);};
+
+function LSTM(cfg,rnd){var A=AD,h=cfg.Hh,D=cfg.D;var P=this.P=[];this.cfg=cfg;
+  function p(r,c){var t=A.param(r,c,rnd,Math.sqrt(1/r)*1.7);P.push(t);return t;}
+  function b(c){var t=A.param(1,c);P.push(t);return t;}
+  this.W=p(D,4*h);this.U=p(h,4*h);this.b=b(4*h);
+  this.Wo1=p(h,cfg.Hout);this.bo1=b(cfg.Hout);this.Wo2=p(cfg.Hout,cfg.C);this.bo2=b(cfg.C);}
+LSTM.prototype.init=function(){var h=this.cfg.Hh;return {h:AD.mk(1,h),c:AD.mk(1,h)};};
+LSTM.prototype.step=function(S,x){var A=AD,h=this.cfg.Hh;
+  var z=A.add(A.add(A.matmul(x,this.W),A.matmul(S.h,this.U)),this.b);
+  var ig=A.sigmoid(A.sliceCols(z,0,h)),fg=A.sigmoid(A.addConst(A.sliceCols(z,h,2*h),1)),og=A.sigmoid(A.sliceCols(z,2*h,3*h)),gg=A.tanh(A.sliceCols(z,3*h,4*h));
+  var c=A.add(A.mul(fg,S.c),A.mul(ig,gg));return {c:c,h:A.mul(og,A.tanh(c))};};
+LSTM.prototype.out=function(S){var A=AD;return A.add(A.matmul(A.relu(A.add(A.matmul(S.h,this.Wo1),this.bo1)),this.Wo2),this.bo2);};
+if(typeof module!=='undefined')module.exports={AD:AD,RMC:RMC,LSTM:LSTM};
+
+
+/* ══════ 데모 1 · 속성 vs 관계 ══════ */
+var d1pts,d1m=0,d1seed=3;
+function d1Gen(){var r=rng(d1seed++);d1pts=[];for(var i=0;i<8;i++)d1pts.push([r()*1.8-0.9,r()*1.8-0.9]);}
+d1Gen();
+function dist2(a,b){return (a[0]-b[0])*(a[0]-b[0])+(a[1]-b[1])*(a[1]-b[1]);}
+var d1geo=null;
+function drawD1(){
+  var n=+$('#d1n').value;$('#d1nv').textContent=n;
+  var S=setup($('#d1cv')),c=S.c,W=S.w,H=S.h,side=Math.min(W,H)-16,ox=(W-side)/2,oy=8;
+  function X(v){return ox+(v+1)/2*side;}function Y(v){return oy+(1-(v+1)/2)*side;}
+  d1geo={X:X,Y:Y,ox:ox,oy:oy,side:side};
+  c.strokeStyle=css('--grid');c.strokeRect(ox,oy,side,side);
+  var m=d1pts[d1m],order=d1pts.map(function(p,i){return i;}).filter(function(i){return i!==d1m;}).sort(function(a,b){return dist2(d1pts[b],m)-dist2(d1pts[a],m);});
+  var ans=order[n-1];
+  order.forEach(function(i,k){c.strokeStyle=i===ans?css('--s2'):hexA(css('--s1'),0.18+0.3*(1-k/7));c.lineWidth=i===ans?3:1.2;
+    c.beginPath();c.moveTo(X(m[0]),Y(m[1]));c.lineTo(X(d1pts[i][0]),Y(d1pts[i][1]));c.stroke();
+    });
+  d1pts.forEach(function(p,i){c.beginPath();c.arc(X(p[0]),Y(p[1]),i===d1m?11:9,0,7);c.fillStyle=i===d1m?css('--s3'):(i===ans?css('--s2'):css('--surface-1'));c.fill();
+    c.lineWidth=2;c.strokeStyle=i===d1m?css('--s3'):(i===ans?css('--s2'):css('--s1'));c.stroke();
+    c.fillStyle=(i===d1m||i===ans)?'#fff':css('--text-primary');c.font='600 11px system-ui';c.textAlign='center';c.textBaseline='middle';c.fillText(i+1,X(p[0]),Y(p[1]));});
+  c.textBaseline='alphabetic';
+  var byX=d1pts.map(function(p,i){return i;}).sort(function(a,b){return d1pts[a][0]-d1pts[b][0];});
+  function chips(arr,hl){return arr.map(function(i){return '<span class="chip'+(i===hl?' hl':'')+(i===d1m?' ref':'')+'">'+(i+1)+'</span>';}).join('');}
+  $('#d1rank').innerHTML='<div><em>x 좌표 순서 (속성)</em>'+chips(byX,-1)+'</div><div><em>m에서 먼 순서 (관계)</em>'+chips(order,ans)+'</div>';
+  $('#d1out').innerHTML='<span>기준 m<b>점 '+(d1m+1)+'</b></span><span>'+n+'번째로 먼 점<b>점 '+(ans+1)+'</b></span><span>거리<b>'+fmt(Math.sqrt(dist2(m,d1pts[ans])),3)+'</b></span>';
+}
+$('#d1n').addEventListener('input',onFrame(drawD1));
+$('#d1new').addEventListener('click',function(){d1Gen();drawD1();});
+$('#d1rand').addEventListener('click',function(){var k;do{k=Math.floor(Math.random()*8);}while(k===d1m);d1m=k;drawD1();});
+$('#d1cv').addEventListener('click',function(ev){if(!d1geo)return;var rc=this.getBoundingClientRect(),px=ev.clientX-rc.left,py=ev.clientY-rc.top,best=-1,bd=1e9;
+  d1pts.forEach(function(p,i){var d=Math.pow(d1geo.X(p[0])-px,2)+Math.pow(d1geo.Y(p[1])-py,2);if(d<bd){bd=d;best=i;}});if(bd<900){d1m=best;drawD1();}});
+
+/* ══════ 데모 2 · 누가 누구를 보나 ══════ */
+var d2mode='rmc';
+function drawD2(){
+  var N=+$('#d2n').value,Hh=+$('#d2h').value;$('#d2nv').textContent=N;$('#d2hv').textContent=Hh;
+  var S=setup($('#d2cv')),c=S.c,W=S.w,H=S.h;c.font='12px system-ui';c.textAlign='center';c.textBaseline='middle';
+  var out='';
+  if(d2mode==='lstm'){
+    var h=16,cw=Math.min(36,(W-40)/h),x0=(W-cw*h)/2,y1=60,y2=210;
+    c.strokeStyle=hexA(css('--s1'),0.08);c.lineWidth=1;
+    for(var i=0;i<h;i++)for(var j=0;j<h;j++){c.beginPath();c.moveTo(x0+i*cw+cw/2,y1+16);c.lineTo(x0+j*cw+cw/2,y2);c.stroke();}
+    [y1,y2].forEach(function(y,k){for(var i=0;i<h;i++){c.fillStyle=hexA(css('--s1'),0.25+0.5*((i*7+k*3)%5)/5);c.fillRect(x0+i*cw+1,y,cw-2,16);}
+      c.fillStyle=css('--text-secondary');c.fillText(k?'h(t)  — 셀 상태 c(t)도 같은 폭':'h(t−1)',W/2,k?y+34:y-14);});
+    c.fillStyle=css('--muted');c.fillText('U: 모든 성분이 모든 성분과 섞인다 — 하지만 “칸”이라는 경계가 없다',W/2,(y1+y2)/2+8);
+    out='<span>칸 구분<b>없음</b></span><span>칸 ↔ 칸 비교<b>해당 없음</b></span><span>은닉 h = 16일 때 U의 곱셈<b>'+fmtInt(4*16*16)+'</b></span>';
+  }else if(d2mode==='ntm'){
+    var cx=W*0.2,cy=H/2,sx=W*0.72,sh=Math.min(26,(H-40)/N),sy0=H/2-N*sh/2;
+    c.fillStyle=css('--wash');c.strokeStyle=css('--s3');c.lineWidth=2;c.beginPath();c.rect(cx-55,cy-30,110,60);c.fill();c.stroke();
+    c.fillStyle=css('--text-primary');c.fillText('컨트롤러',cx,cy-6);c.fillStyle=css('--muted');c.fillText('키 k',cx,cy+12);
+    for(var i=0;i<N;i++){var y=sy0+i*sh;c.fillStyle=hexA(css('--s1'),0.2+0.5*((i*5)%7)/7);c.fillRect(sx-50,y+2,100,sh-4);c.fillStyle=css('--text-primary');c.fillText('M('+i+')',sx+72,y+sh/2);
+      c.strokeStyle=hexA(css('--s2'),0.65);c.lineWidth=1.4;c.beginPath();c.moveTo(cx+55,cy);c.lineTo(sx-52,y+sh/2);c.stroke();}
+    c.fillStyle=css('--muted');c.fillText('칸끼리 잇는 선 없음',sx,sy0+N*sh+14);
+    out='<span>키 ↔ 칸 비교<b>'+fmtInt(Hh*N)+'</b></span><span>칸 ↔ 칸 비교<b>0</b></span><span>컨트롤러가 받는 읽기 벡터<b>'+Hh+'개</b></span>';
+  }else{
+    var R=Math.min(W*0.32,H*0.38),cx=W/2,cy=H/2-4,pos=[];
+    for(var i=0;i<N;i++){var a=-Math.PI/2+2*Math.PI*i/(N+1);pos.push([cx+R*Math.cos(a),cy+R*Math.sin(a)]);}
+    var a=-Math.PI/2+2*Math.PI*N/(N+1),xin=[cx+R*Math.cos(a),cy+R*Math.sin(a)];
+    c.lineWidth=1.2;
+    pos.forEach(function(p,i){pos.forEach(function(q,j){if(j<=i)return;c.strokeStyle=hexA(css('--s1'),0.5);c.beginPath();c.moveTo(p[0],p[1]);c.lineTo(q[0],q[1]);c.stroke();});
+      c.strokeStyle=hexA(css('--s2'),0.8);c.setLineDash([4,3]);c.beginPath();c.moveTo(p[0],p[1]);c.lineTo(xin[0],xin[1]);c.stroke();c.setLineDash([]);});
+    pos.forEach(function(p,i){c.beginPath();c.arc(p[0],p[1],15,0,7);c.fillStyle=css('--surface-1');c.fill();c.strokeStyle=css('--s1');c.lineWidth=2;c.stroke();c.fillStyle=css('--text-primary');c.fillText('m'+i,p[0],p[1]);});
+    c.beginPath();c.arc(xin[0],xin[1],15,0,7);c.fillStyle=css('--s2');c.fill();c.fillStyle='#fff';c.fillText('x',xin[0],xin[1]);
+    out='<span>칸 ↔ 칸 비교<b>'+fmtInt(Hh*N*N)+'</b></span><span>칸 ↔ 입력 비교<b>'+fmtInt(Hh*N)+'</b></span><span>스텝당 어텐션 점수 h·N·(N+1)<b>'+fmtInt(Hh*N*(N+1))+'</b></span>';
+  }
+  $('#d2out').innerHTML=out;
+}
+['#d2a','#d2b','#d2c'].forEach(function(id,k){$(id).addEventListener('click',function(){d2mode=['lstm','ntm','rmc'][k];pressed(['#d2a','#d2b','#d2c'],id);drawD2();});});
+['#d2n','#d2h'].forEach(function(s){$(s).addEventListener('input',onFrame(drawD2));});
+
+/* ══════ 데모 3 · 식 (1) ══════ */
+var d3seed=11,d3M,d3W,d3sel=0,d3geo=null;
+function d3Gen(){var r=rng(d3seed);d3M=randMat(r,8,8,1);d3W={};[1,2,4,8].forEach(function(H){var rr=rng(d3seed*31+H),ws=[];
+  for(var h=0;h<H;h++)ws.push({q:randMat(rr,8,8/H,1/Math.sqrt(8)*1.7),k:randMat(rr,8,8/H,1/Math.sqrt(8)*1.7),v:randMat(rr,8,8/H,1/Math.sqrt(8)*1.7)});d3W[H]=ws;});}
+d3Gen();
+function d3Calc(){var N=+$('#d3n').value,H=[1,2,4,8][+$('#d3h').value],s=+$('#d3s').value;
+  var M=d3M.slice(0,N),W=d3W[H].map(function(w){var f=function(A){return A.map(function(r){return r.map(function(v){return v*s;});});};return {q:f(w.q),k:f(w.k),v:w.v};});
+  return {N:N,H:H,s:s,M:M,r:mhdpa(M,M,W)};}
+function drawD3(){
+  var R=d3Calc(),N=R.N,H=R.H;$('#d3nv').textContent=N;$('#d3hv').textContent=H+' (헤드 크기 '+(8/H)+')';$('#d3sv').textContent=fmt(R.s);
+  if(d3sel>=N)d3sel=N-1;
+  var cv=$('#d3cv'),Wd=cv.clientWidth,cell=Math.max(9,Math.min(22,(Wd-60)/(8*2+3)));
+  var hcell=Math.max(8,Math.min(22,Math.floor((Wd-20)/Math.min(H,4)/(N+1.5)))),perRow=Math.max(1,Math.min(H,Math.floor((Wd-10)/((N+1.5)*hcell))));
+  var rows=Math.ceil(H/perRow),top=N*cell+44,hh=top+rows*(N*hcell+34)+6;cv.dataset.h=hh;
+  var S=setup(cv),c=S.c,W=S.w;c.font='12px system-ui';c.textBaseline='alphabetic';c.textAlign='left';
+  var x1=10,x2=10+8*cell+40;
+  c.fillStyle=css('--text-secondary');c.fillText('메모리 M ('+N+' × 8)',x1,14);c.fillText('결과 M̃ (헤드 '+H+'개를 이어 붙임)',x2,14);
+  drawGrid(c,R.M,x1,22,cell,cell,cellColor);drawGrid(c,R.r.out,x2,22,cell,cell,cellColor);
+  /* 헤드 경계 */
+  c.strokeStyle=css('--text-primary');c.lineWidth=1;for(var h=1;h<H;h++){var xx=x2+h*(8/H)*cell;c.beginPath();c.moveTo(xx,20);c.lineTo(xx,22+N*cell+2);c.stroke();}
+  c.strokeStyle=css('--s2');c.lineWidth=2;c.strokeRect(x1,22+d3sel*cell,8*cell,cell);c.strokeRect(x2,22+d3sel*cell,8*cell,cell);
+  var geo=[];
+  R.r.att.forEach(function(A,h){var gx=10+(h%perRow)*((N+1.5)*hcell),gy=top+Math.floor(h/perRow)*(N*hcell+34);
+    c.fillStyle=css('--text-secondary');c.fillText('헤드 '+(h+1),gx,gy+10);
+    drawGrid(c,A,gx,gy+16,hcell,hcell,heat);
+    c.strokeStyle=css('--s2');c.lineWidth=2;c.strokeRect(gx,gy+16+d3sel*hcell,N*hcell,hcell);
+    geo.push({x:gx,y:gy+16,w:N*hcell,h:N*hcell,cell:hcell});});
+  d3geo={geo:geo,x1:x1,cell:cell,N:N};
+  var ent=R.r.att.map(function(A){var e=0;A.forEach(function(a){a.forEach(function(p){if(p>0)e-=p*Math.log(p);});});return e/A.length;});
+  $('#d3out').innerHTML='<span>어텐션 행렬<b>'+H+' × ('+N+' × '+N+')</b></span><span>헤드당 d<sub>k</sub><b>'+(8/H)+'</b></span><span>평균 엔트로피 / 균등일 때<b>'+fmt(ent.reduce(function(a,b){return a+b;},0)/H)+' / '+fmt(Math.log(N))+'</b></span>';
+  $('#d3row').innerHTML='<strong>슬롯 '+d3sel+'</strong>의 갱신 제안 = '+R.r.att.map(function(A,h){
+    var w=A[d3sel].map(function(p,j){return [p,j];}).sort(function(a,b){return b[0]-a[0];}).slice(0,3);
+    return '헤드 '+(h+1)+': '+w.map(function(t){return fmt(t[0])+'·v<sub>'+t[1]+'</sub>';}).join(' + ')+(N>3?' + …':'');}).join('<br>');
+}
+['#d3n','#d3h','#d3s'].forEach(function(s){$(s).addEventListener('input',onFrame(drawD3));});
+$('#d3new').addEventListener('click',function(){d3seed++;d3Gen();drawD3();});
+$('#d3cv').addEventListener('click',function(ev){if(!d3geo)return;var rc=this.getBoundingClientRect(),px=ev.clientX-rc.left,py=ev.clientY-rc.top;
+  d3geo.geo.forEach(function(g){if(px>=g.x&&px<=g.x+g.w&&py>=g.y&&py<=g.y+g.h)d3sel=Math.floor((py-g.y)/g.cell);});
+  if(px<d3geo.x1+8*d3geo.cell*2+40&&py>=22&&py<22+d3geo.N*d3geo.cell)d3sel=Math.floor((py-22)/d3geo.cell);
+  drawD3();});
+
+/* ══════ 데모 4 · 식 (2) ══════ */
+var d4r0=rng(41),d4M=randMat(d4r0,4,8,1),d4W=[0,1].map(function(){return {q:randMat(d4r0,8,4,0.85),k:randMat(d4r0,8,4,0.85),v:randMat(d4r0,8,4,0.6)};}),d4z,d4zs=5;
+function d4Z(){var r=rng(d4zs++);d4z=[];for(var j=0;j<8;j++)d4z.push(r()*2-1);}
+d4Z();
+function d4Calc(){var k=+$('#d4k').value,a=+$('#d4a').value;var x=d4M[k].map(function(v,j){return a*v+(1-a)*d4z[j];});
+  var Mx=d4M.concat([x]),r=mhdpa(d4M,Mx,d4W),full=mhdpa(Mx,Mx,d4W);
+  var diff=0;for(var i=0;i<4;i++)for(var j=0;j<8;j++)diff=Math.max(diff,Math.abs(r.out[i][j]-full.out[i][j]));
+  return {k:k,a:a,x:x,r:r,diff:diff};}
+function drawD4(){
+  var R=d4Calc();$('#d4kv').textContent=R.k;$('#d4av').textContent=fmt(R.a);
+  var S=setup($('#d4cv')),c=S.c,W=S.w,H=S.h,N=4;c.font='12px system-ui';c.textAlign='left';
+  var cell=Math.min(34,(W-80)/(2*(N+1)+2.2)),gap=cell*1.6;
+  R.r.att.forEach(function(A,h){var gx=34+h*((N+1)*cell+gap),gy=30;
+    c.fillStyle=css('--text-secondary');c.fillText('헤드 '+(h+1)+' (쿼리 4 × 키 5)',gx,18);
+    for(var i=0;i<N;i++)for(var j=0;j<=N;j++){c.fillStyle=j===N?hexA(css('--s2'),0.06+0.94*A[i][j]):heat(A[i][j]);c.fillRect(gx+j*cell+(j===N?6:0)+0.5,gy+i*cell+0.5,cell-1,cell-1);
+      if(cell>24){c.fillStyle=A[i][j]>0.55?'#fff':css('--text-primary');c.font='10px system-ui';c.textAlign='center';c.fillText(fmt(A[i][j]),gx+j*cell+(j===N?6:0)+cell/2,gy+i*cell+cell/2+3);c.textAlign='left';c.font='12px system-ui';}}
+    c.strokeStyle=css('--muted');c.setLineDash([3,3]);c.beginPath();c.moveTo(gx+N*cell+3,gy-4);c.lineTo(gx+N*cell+3,gy+N*cell+4);c.stroke();c.setLineDash([]);
+    c.fillStyle=css('--muted');c.font='11px system-ui';c.textAlign='center';
+    for(j=0;j<=N;j++)c.fillText(j===N?'x':'m'+j,gx+j*cell+(j===N?6:0)+cell/2,gy+N*cell+16);
+    c.textAlign='right';for(i=0;i<N;i++)c.fillText('m'+i,gx-2,gy+i*cell+cell/2+4);c.textAlign='left';c.font='12px system-ui';});
+  var toIn=[0,1,2,3].map(function(i){return (R.r.att[0][i][N]+R.r.att[1][i][N])/2;});
+  $('#d4out').innerHTML='<span>[M; x]<b>5 × 8</b></span><span>어텐션 (헤드마다)<b>4 × 5</b></span><span>결과 M̃<b>4 × 8</b></span>'+
+    '<span>슬롯별 입력 몫 (두 헤드 평균)<b>'+toIn.map(function(v){return fmt(v);}).join(' · ')+'</b></span><span>Sonnet 방식과의 최대 차이<b>'+(R.diff===0?'0':R.diff.toExponential(1))+'</b></span>';
+}
+['#d4k','#d4a'].forEach(function(s){$(s).addEventListener('input',onFrame(drawD4));});
+$('#d4new').addEventListener('click',function(){d4Z();drawD4();});
+
+/* ══════ 데모 5 · 게이트 ══════ */
+var d5keep=false;
+function sig(x){return 1/(1+Math.exp(-x));}
+function d5Run(ai,af,bias){var m=0,out=[0];for(var t=0;t<30;t++){var cand=(t===0||d5keep)?2:0;m=sig(ai)*Math.tanh(cand)+sig(af+bias)*m;out.push(m);}return out;}
+function drawD5(){
+  var ai=+$('#d5i').value,af=+$('#d5f').value;$('#d5iv').textContent=fmt(ai)+' → σ = '+fmt(sig(ai));$('#d5fv').textContent=fmt(af)+' → σ(a+1) = '+fmt(sig(af+1));
+  var a=d5Run(ai,af,1),b=d5Run(ai,af,0),mx=Math.max(1,Math.max.apply(null,a)*1.1);
+  var S=setup($('#d5cv')),c=S.c,W=S.w,H=S.h,L=40,B=24,T=10;
+  function X(t){return L+(W-L-12)*t/30;}function Y(v){return T+(H-T-B)*(1-v/mx);}
+  c.strokeStyle=css('--grid');c.fillStyle=css('--muted');c.font='11px system-ui';c.textAlign='center';
+  for(var t=0;t<=30;t+=5){c.beginPath();c.moveTo(X(t),T);c.lineTo(X(t),H-B);c.stroke();c.fillText(t,X(t),H-B+15);}
+  c.textAlign='right';[0,mx/2,mx].forEach(function(v){c.fillText(fmt(v,1),L-6,Y(v)+4);c.beginPath();c.moveTo(L,Y(v));c.lineTo(W-12,Y(v));c.stroke();});
+  function line(arr,col,dash,w){c.strokeStyle=col;c.lineWidth=w;c.setLineDash(dash);c.beginPath();arr.forEach(function(v,t){if(t)c.lineTo(X(t),Y(v));else c.moveTo(X(t),Y(v));});c.stroke();c.setLineDash([]);}
+  line(b,css('--muted'),[5,4],1.8);line(a,css('--s1'),[],2.6);
+  var f=sig(af+1),hl=Math.log(0.5)/Math.log(f);
+  $('#d5out').innerHTML='<span>망각 게이트 σ(a<sub>f</sub>+1)<b>'+fmt(f,3)+'</b></span><span>반감기<b>'+(isFinite(hl)?fmt(hl,1)+' 스텝':'∞')+'</b></span>'+
+    (d5keep?'<span>수렴값 σ(a<sub>i</sub>)tanh(2)/(1−f)<b>'+fmt(sig(ai)*Math.tanh(2)/(1-f),2)+'</b></span>':'<span>t = 10의 값<b>'+fmt(a[11],3)+'</b></span>');
+}
+['#d5i','#d5f'].forEach(function(s){$(s).addEventListener('input',onFrame(drawD5));});
+$('#d5once').addEventListener('click',function(){d5keep=false;pressed(['#d5once','#d5keep'],'#d5once');drawD5();});
+$('#d5keep').addEventListener('click',function(){d5keep=true;pressed(['#d5once','#d5keep'],'#d5keep');drawD5();});
+
+/* ══════ 데모 6 · 파라미터 ══════ */
+var d6gate='unit';
+/* Sonnet relational_memory.py, 블록 1개, key_size = head_size */
+function rmcParams(o){var ms=o.H*o.hs,qkv=o.H*3*o.hs,p=0,parts={};
+  parts.input=o.in*ms+ms;
+  parts.qkv=ms*qkv+qkv+2*qkv;
+  parts.ln=2*ms*2;
+  parts.mlp=o.L*(ms*ms+ms);
+  parts.gate=o.gate==='unit'?2*(ms*2*ms+2*ms):2*(ms*2+2);
+  for(var k in parts)p+=parts[k];return {total:p,parts:parts,ms:ms};}
+function d6Opts(N){return {N:N==null?+$('#d6n').value:N,H:+$('#d6h').value,hs:+$('#d6s').value,L:+$('#d6l').value,in:+$('#d6i').value,gate:d6gate};}
+function drawD6(){
+  var o=d6Opts(),R=rmcParams(o);
+  $('#d6nv').textContent=o.N;$('#d6hv').textContent=o.H;$('#d6sv').textContent=o.hs+' (슬롯 크기 '+R.ms+')';$('#d6lv').textContent=o.L;$('#d6iv').textContent=o.in;
+  var S=setup($('#d6cv')),c=S.c,W=S.w,H=S.h,L=52,B=24,T=10;
+  var series=[[],[],[]];for(var n=1;n<=32;n++){series[0].push(R.total);series[1].push(n*R.ms);series[2].push(o.H*n*(n+1));}
+  var all=series[0].concat(series[1],series[2]),lo=Math.floor(Math.log10(Math.min.apply(null,all))),hi=Math.ceil(Math.log10(Math.max.apply(null,all)));if(hi===lo)hi++;
+  function X(n){return L+(W-L-14)*(n-1)/31;}function Y(v){return T+(H-T-B)*(1-(Math.log10(v)-lo)/(hi-lo));}
+  c.font='11px system-ui';c.strokeStyle=css('--grid');c.fillStyle=css('--muted');c.textAlign='right';
+  for(var e=lo;e<=hi;e++){c.beginPath();c.moveTo(L,Y(Math.pow(10,e)));c.lineTo(W-14,Y(Math.pow(10,e)));c.stroke();c.fillText('10'+sup(e),L-6,Y(Math.pow(10,e))+4);}
+  c.textAlign='center';[1,8,16,24,32].forEach(function(n){c.fillText(n,X(n),H-B+15);});
+  [css('--s1'),css('--s2'),css('--s3')].forEach(function(col,k){c.strokeStyle=col;c.lineWidth=2.4;c.beginPath();series[k].forEach(function(v,i){if(i)c.lineTo(X(i+1),Y(v));else c.moveTo(X(1),Y(v));});c.stroke();
+    c.fillStyle=col;c.beginPath();c.arc(X(o.N),Y(series[k][o.N-1]),4.5,0,7);c.fill();});
+  c.strokeStyle=css('--axis');c.setLineDash([3,3]);c.beginPath();c.moveTo(X(o.N),T);c.lineTo(X(o.N),H-B);c.stroke();c.setLineDash([]);
+  var big=Object.keys(R.parts).sort(function(a,b){return R.parts[b]-R.parts[a];})[0],nm={input:'입력 투영',qkv:'QKV 투영',ln:'LayerNorm',mlp:'MLP',gate:'게이트'};
+  $('#d6out').innerHTML='<span>코어 파라미터<b>'+fmtInt(R.total)+'</b></span><span>메모리 원소 수<b>'+fmtInt(o.N*R.ms)+'</b></span><span>스텝당 어텐션 점수<b>'+fmtInt(o.H*o.N*(o.N+1))+'</b></span>'+
+    '<span>가장 큰 부분<b>'+nm[big]+' '+fmtInt(R.parts[big])+'</b></span><span>게이트 파라미터<b>'+fmtInt(R.parts.gate)+'</b></span>';
+}
+function sup(e){var m={'-':'⁻','0':'⁰','1':'¹','2':'²','3':'³','4':'⁴','5':'⁵','6':'⁶','7':'⁷','8':'⁸','9':'⁹'};return String(e).split('').map(function(ch){return m[ch];}).join('');}
+['#d6n','#d6h','#d6s','#d6l','#d6i'].forEach(function(s){$(s).addEventListener('input',onFrame(drawD6));});
+function d6Set(o){Object.keys(o).forEach(function(k){$('#d6'+k).value=o[k];});drawD6();}
+$('#d6p1').addEventListener('click',function(){d6Set({n:8,h:8,s:32,l:2,i:40});});
+$('#d6p2').addEventListener('click',function(){d6Set({n:1,h:4,s:625,l:5,i:512});});
+$('#d6gu').addEventListener('click',function(){d6gate='unit';pressed(['#d6gu','#d6gm'],'#d6gu');drawD6();});
+$('#d6gm').addEventListener('click',function(){d6gate='memory';pressed(['#d6gu','#d6gm'],'#d6gm');drawD6();});
+
+/* ══════ 데모 6b · 대칭 ══════ */
+var d6bInit='eye',d6bSeed=7,d6bRes=null;
+function d6bRun(seed){var r=rng(seed),model=new RMC({D:6,N:4,H:2,hs:4,Hout:4,C:2},r),xs=[];
+  for(var t=0;t<16;t++){var a=new Float64Array(6);for(var j=0;j<6;j++)a[j]=gauss(r);xs.push(a);}
+  function run(init){var M=init==='eye'?model.init():AD.mk(4,model.ms),hist=[];
+    function spread(M){var s=0,k=0;for(var i=0;i<4;i++)for(var j=i+1;j<4;j++){var d=0;for(var q=0;q<model.ms;q++){var e=M.v[i*model.ms+q]-M.v[j*model.ms+q];d+=e*e;}s+=Math.sqrt(d);k++;}return s/k;}
+    hist.push(spread(M));xs.forEach(function(x){M=model.step(M,AD.mk(1,6,x));AD.clear();hist.push(spread(M));});
+    var rows=[];for(var i=0;i<4;i++){var row=[];for(var q=0;q<model.ms;q++)row.push(M.v[i*model.ms+q]);rows.push(row);}return {hist:hist,M:rows};}
+  return {eye:run('eye'),zero:run('zero')};}
+function drawD6b(){
+  if(!d6bRes)d6bRes=d6bRun(d6bSeed);
+  var S=setup($('#d6bcv')),c=S.c,W=S.w,H=S.h,L=40,T=10,ph=140,B=ph+T;
+  var mx=Math.max.apply(null,d6bRes.eye.hist.concat(d6bRes.zero.hist))*1.1||1;
+  function X(t){return L+(W-L-12)*t/16;}function Y(v){return T+(ph-10)*(1-v/mx);}
+  c.font='11px system-ui';c.strokeStyle=css('--grid');c.fillStyle=css('--muted');c.textAlign='center';
+  for(var t=0;t<=16;t+=4){c.beginPath();c.moveTo(X(t),T);c.lineTo(X(t),T+ph-10);c.stroke();c.fillText('t='+t,X(t),T+ph+6);}
+  c.textAlign='right';[0,mx/2].forEach(function(v){c.fillText(fmt(v,1),L-6,Y(v)+4);});
+  [['eye',css('--s1')],['zero',css('--s2')]].forEach(function(p){var h=d6bRes[p[0]].hist;c.strokeStyle=p[1];c.lineWidth=p[0]===d6bInit?2.8:1.4;c.beginPath();h.forEach(function(v,t){if(t)c.lineTo(X(t),Y(v));else c.moveTo(X(t),Y(v));});c.stroke();});
+  var R=d6bRes[d6bInit].M,cell=Math.min(26,(W-80)/8),gx=L+12,gy=B+36;
+  c.textAlign='left';c.fillStyle=css('--text-secondary');c.font='12px system-ui';c.fillText('t = 16의 메모리 (4 슬롯 × 8)',gx,gy-6);
+  drawGrid(c,R,gx,gy,cell,Math.min(22,cell),cellColor);
+  c.fillStyle=css('--muted');c.font='11px system-ui';c.textAlign='right';for(var i=0;i<4;i++)c.fillText('슬롯 '+i,gx-4,gy+i*Math.min(22,cell)+Math.min(22,cell)/2+4);
+  var e=d6bRes.eye.hist,z=d6bRes.zero.hist;
+  $('#d6bout').innerHTML='<span>단위 행렬 시작 · t = 16 평균 슬롯 거리<b>'+fmt(e[16],3)+'</b></span><span>0으로 시작 · t = 16 평균 슬롯 거리<b>'+(z[16]===0?'0 (정확히)':z[16].toExponential(2))+'</b></span>';
+}
+$('#d6bi').addEventListener('click',function(){d6bInit='eye';pressed(['#d6bi','#d6bz'],'#d6bi');drawD6b();});
+$('#d6bz').addEventListener('click',function(){d6bInit='zero';pressed(['#d6bi','#d6bz'],'#d6bz');drawD6b();});
+$('#d6bn').addEventListener('click',function(){d6bSeed++;d6bRes=null;drawD6b();});
+
+/* ══════ 데모 7 · 거리 어텐션 ══════ */
+var d7pts,d7m=0,d7seed=21,d7geo=null;
+function d7Gen(){var r=rng(d7seed++);d7pts=[];for(var i=0;i<6;i++)d7pts.push([r()*1.8-0.9,r()*1.8-0.9]);}
+d7Gen();
+function d7Key(x){return [x[0],x[1],x[0]*x[0]+x[1]*x[1],1];}
+function d7Query(x){return [-2*x[0],-2*x[1],1,x[0]*x[0]+x[1]*x[1]];}
+function d7Calc(beta,n){var mask=d7pts.map(function(){return false;}),rounds=[],q=d7Query(d7pts[d7m]);
+  for(var r=0;r<n;r++){var idx=[],sc=[];d7pts.forEach(function(p,j){if(!mask[j]){idx.push(j);sc.push(beta*dot(q,d7Key(p)));}});
+    var a=softmax(sc),w=d7pts.map(function(){return 0;});idx.forEach(function(j,k){w[j]=a[k];});
+    var pick=0;w.forEach(function(v,j){if(v>w[pick])pick=j;});rounds.push({w:w,pick:pick});mask[pick]=true;}
+  return rounds;}
+function drawD7(){
+  var beta=+$('#d7b').value,n=+$('#d7n').value;$('#d7bv').textContent=fmt(beta,1);$('#d7nv').textContent=n;
+  var R=d7Calc(beta,n),last=R[R.length-1];
+  $('#d7cv').dataset.h=$('#d7cv').clientWidth<560?420:300;
+  var S=setup($('#d7cv')),c=S.c,W=S.w,H=S.h,narrow=W<560,side=narrow?Math.min(W,H)-110:Math.min(W*0.55,H)-16,ox=8,oy=8;
+  if(narrow){side=Math.min(W-16,H-100);ox=(W-side)/2;}
+  function X(v){return ox+(v+1)/2*side;}function Y(v){return oy+(1-(v+1)/2)*side;}
+  d7geo={X:X,Y:Y};
+  c.strokeStyle=css('--grid');c.strokeRect(ox,oy,side,side);
+  var m=d7pts[d7m];
+  d7pts.forEach(function(p,j){if(j===d7m)return;c.strokeStyle=hexA(css('--s1'),0.1+0.85*last.w[j]);c.lineWidth=1+5*last.w[j];c.beginPath();c.moveTo(X(m[0]),Y(m[1]));c.lineTo(X(p[0]),Y(p[1]));c.stroke();});
+  var masked=R.slice(0,-1).map(function(r){return r.pick;});
+  d7pts.forEach(function(p,j){c.beginPath();c.arc(X(p[0]),Y(p[1]),10,0,7);c.fillStyle=j===d7m?css('--s3'):(masked.indexOf(j)>=0?css('--grid'):css('--surface-1'));c.fill();
+    c.strokeStyle=j===d7m?css('--s3'):(j===last.pick?css('--s2'):css('--s1'));c.lineWidth=j===last.pick?3:2;c.stroke();
+    c.fillStyle=j===d7m?'#fff':css('--text-primary');c.font='600 11px system-ui';c.textAlign='center';c.textBaseline='middle';c.fillText(j+1,X(p[0]),Y(p[1]));});
+  c.textBaseline='alphabetic';
+  /* 막대 */
+  var bx=narrow?8:ox+side+30,by=narrow?oy+side+18:oy+20,bw=narrow?W-16:W-bx-10,bh=narrow?H-by-18:H-by-40,cw=bw/6;
+  c.font='11px system-ui';c.fillStyle=css('--text-secondary');c.textAlign='left';c.fillText((n>1?n+'번째 ':'')+'어텐션 가중치 (슬롯 '+(d7m+1)+'의 쿼리)',bx,by-6);
+  last.w.forEach(function(v,j){c.fillStyle=j===last.pick?css('--s2'):css('--s1');var hh=Math.max(1,v*(bh-16));c.fillRect(bx+j*cw+4,by+bh-16-hh,cw-8,hh);
+    c.fillStyle=css('--muted');c.textAlign='center';c.fillText(j+1,bx+j*cw+cw/2,by+bh-3);if(!narrow||bh>40)c.fillText(fmt(v),bx+j*cw+cw/2,by+bh-20-hh);});
+  var truth=d7pts.map(function(p,j){return j;}).filter(function(j){return j!==d7m;}).sort(function(a,b){return dist2(d7pts[b],m)-dist2(d7pts[a],m);});
+  var tgt=beta>=0?truth[n-1]:truth[truth.length-n];
+  $('#d7out').innerHTML='<span>q<sub>m</sub>·k<sub>j</sub> = 거리²<b>확인: '+fmt(dot(d7Query(m),d7Key(d7pts[truth[0]])),4)+' = '+fmt(dist2(m,d7pts[truth[0]]),4)+'</b></span>'+
+    '<span>고른 점 (회차별)<b>'+R.map(function(r){return r.pick+1;}).join(' → ')+'</b></span><span>'+(beta>=0?n+'번째로 먼':n+'번째로 가까운')+' 점 (정답)<b>점 '+(tgt+1)+(tgt===last.pick?' ✓':' ✗')+'</b></span><span>최댓값 가중치<b>'+fmt(last.w[last.pick],3)+'</b></span>';
+}
+['#d7b','#d7n'].forEach(function(s){$(s).addEventListener('input',onFrame(drawD7));});
+$('#d7new').addEventListener('click',function(){d7Gen();drawD7();});
+$('#d7cv').addEventListener('click',function(ev){if(!d7geo)return;var rc=this.getBoundingClientRect(),px=ev.clientX-rc.left,py=ev.clientY-rc.top,best=-1,bd=1e9;
+  d7pts.forEach(function(p,i){var d=Math.pow(d7geo.X(p[0])-px,2)+Math.pow(d7geo.Y(p[1])-py,2);if(d<bd){bd=d;best=i;}});if(bd<900){d7m=best;drawD7();}});
+
+/* ══════ 데모 7b · 어텐션이 거리를 배우기 ══════ */
+var FAR={P:6,
+  model:function(kind,r){var A=AD,m={kind:kind,P:[]};function p(a,b){var t=A.param(a,b,r,Math.sqrt(1/a)*1.7);m.P.push(t);return t;}
+    var din=kind==='sq'?4:3;if(kind==='mlp'){m.W1=p(3,16);m.b1=A.param(1,16);m.P.push(m.b1);m.W2=p(16,4);din=4;}
+    m.Wq=p(din,4);m.Wk=p(din,4);return m;},
+  feats:function(m,xs){var A=AD,c=m.kind==='sq'?4:3,U=A.mk(FAR.P,c);
+    xs.forEach(function(x,j){U.v[j*c]=x[0];U.v[j*c+1]=x[1];if(m.kind==='sq'){U.v[j*c+2]=x[0]*x[0]+x[1]*x[1];U.v[j*c+3]=1;}else U.v[j*c+2]=1;});
+    return m.kind==='mlp'?A.matmul(A.relu(A.add(A.matmul(U,m.W1),m.b1)),m.W2):U;},
+  logits:function(m,xs,mi){var A=AD,F=FAR.feats(m,xs);return A.scale(A.matmulT(A.matmul(A.sliceRows(F,mi,mi+1),m.Wq),A.matmul(F,m.Wk)),0.5);},
+  sample:function(r){var xs=[];for(var j=0;j<FAR.P;j++)xs.push([r()*2-1,r()*2-1]);var mi=Math.floor(r()*FAR.P),y=-1,best=-1;
+    xs.forEach(function(x,j){var d=dist2(x,xs[mi]);if(d>best){best=d;y=j;}});return {xs:xs,mi:mi,y:y};},
+  init:function(){var st={it:0,curves:{raw:[],sq:[],mlp:[]},acc:{raw:0,sq:0,mlp:0},models:{},opts:{},data:rng(9)};
+    ['raw','sq','mlp'].forEach(function(k){var mdl=FAR.model(k,rng(5));st.models[k]=mdl;st.opts[k]=new AD.Adam(mdl.P,1e-2);});return st;},
+  /* 한 스텝: 같은 배치를 세 모델에 */
+  step:function(st){var batch=[];for(var b=0;b<32;b++)batch.push(FAR.sample(st.data));
+    ['raw','sq','mlp'].forEach(function(k){var mdl=st.models[k];batch.forEach(function(s){var L=AD.xent(FAR.logits(mdl,s.xs,s.mi),s.y);
+      var am=0;for(var j=1;j<FAR.P;j++)if(L.p[j]>L.p[am])am=j;st.acc[k]+=am===s.y?1:0;AD.backward(L);});st.opts[k].step(1/32);});
+    st.it++;if(st.it%50===0){['raw','sq','mlp'].forEach(function(k){st.curves[k].push(st.acc[k]/(50*32));st.acc[k]=0;});}}
+};
+var d7st=FAR.init(),d7timer=null;
+function d7Loop(){var t0=performance.now();var k=0;while(performance.now()-t0<22&&d7st.it<1500&&k<12){FAR.step(d7st);k++;}drawD7b();
+  if(d7st.it<1500)d7timer=requestAnimationFrame(d7Loop);else d7timer=null;}
+function drawD7b(){
+  var S=setup($('#d7lcv')),c=S.c,W=S.w,H=S.h,L=40,B=24,T=10;
+  function X(i){return L+(W-L-12)*i/1500;}function Y(v){return T+(H-T-B)*(1-v);}
+  c.font='11px system-ui';c.strokeStyle=css('--grid');c.fillStyle=css('--muted');c.textAlign='center';
+  for(var i=0;i<=1500;i+=250){c.beginPath();c.moveTo(X(i),T);c.lineTo(X(i),H-B);c.stroke();c.fillText(i,X(i),H-B+15);}
+  c.textAlign='right';[0,0.25,0.5,0.75,1].forEach(function(v){c.fillText(Math.round(v*100)+'%',L-6,Y(v)+4);});
+  c.strokeStyle=css('--muted');c.setLineDash([4,4]);c.beginPath();c.moveTo(L,Y(1/6));c.lineTo(W-12,Y(1/6));c.stroke();c.setLineDash([]);
+  [['raw','--s2'],['sq','--s1'],['mlp','--s3']].forEach(function(p){var cv=d7st.curves[p[0]];if(!cv.length)return;c.strokeStyle=css(p[1]);c.lineWidth=2.4;c.beginPath();
+    cv.forEach(function(v,k){var x=X((k+1)*50);if(k)c.lineTo(x,Y(v));else c.moveTo(x,Y(v));});c.stroke();});
+  function last(k){var cv=d7st.curves[k];return cv.length?Math.round(cv[cv.length-1]*100)+'%':'—';}
+  $('#d7lout').innerHTML='<span>스텝<b>'+d7st.it+' / 1500</b></span><span>[x, 1]<b>'+last('raw')+'</b></span><span>[x, ‖x‖², 1]<b>'+last('sq')+'</b></span><span>슬롯별 MLP<b>'+last('mlp')+'</b></span>';
+  /* 학습된 이중선형 행렬 vs 손 배선 */
+  var mdl=d7st.models.sq,Bm=[];for(var i=0;i<4;i++){var row=[];for(var j=0;j<4;j++){var s=0;for(var k=0;k<4;k++)s+=mdl.Wq.v[i*4+k]*mdl.Wk.v[j*4+k];row.push(s*0.5);}Bm.push(row);}
+  var hand=[[-2,0,0,0],[0,-2,0,0],[0,0,0,1],[0,0,1,0]];
+  /* 소프트맥스는 j에 무관한 항과 전체 배율에 둔감하므로, x·x 블록 대각 평균으로 배율만 맞춘다 */
+  var sc=-(Bm[0][0]+Bm[1][1])/4||1,Bn=Bm.map(function(r){return r.map(function(v){return v/sc;});});
+  var S2=setup($('#d7acv')),c2=S2.c,W2=S2.w,cell=Math.min(34,(W2-120)/9),names=['x₁','x₂','‖x‖²','1'];
+  function mat(Mx,gx,title){c2.fillStyle=css('--text-secondary');c2.font='12px system-ui';c2.textAlign='left';c2.fillText(title,gx,16);
+    for(var i=0;i<4;i++)for(var j=0;j<4;j++){var v=Mx[i][j]/2;c2.globalAlpha=j===3?0.3:1;c2.fillStyle=cellColor(v);c2.fillRect(gx+j*cell+0.5,26+i*cell+0.5,cell-1,cell-1);
+      c2.fillStyle=css('--text-primary');c2.font='10px system-ui';c2.textAlign='center';c2.fillText(fmt(Mx[i][j],1),gx+j*cell+cell/2,26+i*cell+cell/2+3);c2.globalAlpha=1;}
+    c2.fillStyle=css('--muted');c2.font='10px system-ui';for(i=0;i<4;i++){c2.textAlign='right';c2.fillText(names[i],gx-3,26+i*cell+cell/2+3);c2.textAlign='center';c2.fillText(names[i],gx+i*cell+cell/2,26+4*cell+12);}}
+  mat(Bn,40,d7st.it?'학습된 Wq·Wkᵀ (배율 맞춤, [x, ‖x‖², 1] 모델)':'학습 전 Wq·Wkᵀ (무작위)');mat(hand,40+4*cell+60,'손 배선 (‖x_m−x_j‖²)');
+  }
+$('#d7go').addEventListener('click',function(){if(d7timer)return;if(d7st.it>=1500)d7st=FAR.init();d7timer=requestAnimationFrame(d7Loop);});
+$('#d7stop').addEventListener('click',function(){if(d7timer){cancelAnimationFrame(d7timer);d7timer=null;}});
+$('#d7reset').addEventListener('click',function(){if(d7timer){cancelAnimationFrame(d7timer);d7timer=null;}d7st=FAR.init();drawD7b();});
+
+/* ══════ 데모 8 · Learning to Execute 형식 ══════ */
+var d8type='prg',d8seed=1,d8cur=null;
+function d8Gen(type,Lit,nest,r){
+  function num(){var d=1+Math.floor(r()*Lit),lo=Math.pow(10,d-1);return lo+Math.floor(r()*(Math.pow(10,d)-lo));}
+  function small(){return 1+Math.floor(r()*9);}
+  var mod=Math.pow(10,Lit);
+  if(type==='add'){var a=num(),b=num();return {code:'print(('+a+'+'+b+')%'+mod+')',ans:String((a+b)%mod)};}
+  function expr(d,env){/* 값과 문자열을 같이 만든다 */
+    if(d<=0){if(env&&r()<0.5){var k=Object.keys(env)[Math.floor(r()*Object.keys(env).length)];return {s:k,v:env[k]};}var n=num();return {s:String(n),v:n};}
+    var t=Math.floor(r()*4),A=expr(d-1,env),B=expr(d-1,env);
+    if(t===0)return {s:A.s+'+'+B.s,v:A.v+B.v};
+    if(t===1)return {s:A.s+'-'+(/^\w+$/.test(B.s)?B.s:'('+B.s+')'),v:A.v-B.v};
+    if(t===2){var s=small();return {s:'('+A.s+')*'+s,v:A.v*s};}
+    var c1=num(),c2=num();return {s:'('+A.s+' if '+c1+'<'+c2+' else '+B.s+')',v:c1<c2?A.v:B.v};}
+  var lines=[],env={},x=num();lines.push('x='+x);env.x=x;
+  function loop(depth,ind){var k=small()+Math.floor(r()*10),b=num();lines.push(ind+'for [' +k+']:');
+    if(depth>1){var inner=loop(depth-1,ind+'    ');return k*inner;}lines.push(ind+'    x+='+b);return k*b;}
+  if(type==='ctl'){
+    env.x+=loop(nest,'');
+    var c1=num(),c2=num(),e=num();lines.push('x=(x if '+c1+'<'+c2+' else '+e+')');env.x=c1<c2?env.x:e;
+    lines.push('print(x%'+mod+')');return {code:lines.join('\n'),ans:String(((env.x%mod)+mod)%mod)};}
+  var y=expr(nest,env);lines.push('y='+y.s);env.y=y.v;
+  if(r()<0.6){env.x+=loop(Math.max(1,nest-1),'');}
+  var z=expr(nest,env);lines.push('print(('+z.s+')%'+mod+')');
+  return {code:lines.join('\n'),ans:String(((z.v%mod)+mod)%mod)};}
+function d8New(){d8cur=d8Gen(d8type,+$('#d8l').value,+$('#d8n').value,rng(d8seed++));$('#d8code').textContent=d8cur.code;$('#d8ans').value='';d8Score(false);}
+function d8Score(show){var a=$('#d8ans').value.trim(),t=d8cur.ans,ok=0;for(var i=0;i<t.length;i++)if(a[i]===t[i])ok++;
+  $('#d8lv').textContent=$('#d8l').value;$('#d8nv').textContent=$('#d8n').value;
+  $('#d8out').innerHTML='<span>글자 단위 정확도<b>'+(a?Math.round(100*ok/t.length)+'% ('+ok+'/'+t.length+')':'—')+'</b></span><span>정답<b>'+(show?t:'?'.repeat(t.length))+'</b></span>'+
+    '<span>입력 길이<b>'+d8cur.code.length+'글자</b></span>';}
+['#d8add','#d8ctl','#d8prg'].forEach(function(id,k){$(id).addEventListener('click',function(){d8type=['add','ctl','prg'][k];pressed(['#d8add','#d8ctl','#d8prg'],id);d8New();});});
+$('#d8new').addEventListener('click',d8New);
+$('#d8show').addEventListener('click',function(){d8Score(true);});
+$('#d8ans').addEventListener('input',function(){d8Score(false);});
+['#d8l','#d8n'].forEach(function(s){$(s).addEventListener('input',d8New);});
+(function(){var rows=[['LSTM',[99.8,97.4,66.1,99.8,99.7,99.7]],['EntNet',[98.4,98.0,73.4,91.8,100.0,62.3]],['DNC',[99.4,83.8,69.5,100.0,100.0,100.0]],['Relational Memory Core',[99.9,99.6,79.0,100.0,100.0,99.8]]];
+  var mx=[0,1,2,3,4,5].map(function(j){return Math.max.apply(null,rows.map(function(r){return r[1][j];}));});
+  $('#t1').innerHTML=rows.map(function(r){return '<tr><td>'+r[0]+'</td>'+r[1].map(function(v,j){return '<td class="num"'+(v===mx[j]?' style="font-weight:700;color:var(--s1)"':'')+'>'+v.toFixed(1)+'</td>';}).join('')+'</tr>';}).join('');})();
+
+/* ══════ 데모 9 · BoxWorld ══════ */
+var BW={G:14,st:null,vp:true,graph:false,seed:3};
+function bwColors(){var a=[];for(var i=0;i<20;i++)a.push('hsl('+Math.round(i*360/20+7)+','+(i%2?62:78)+'%,'+(i%3===0?48:i%3===1?60:40)+'%)');return a;}
+var BWC=bwColors();
+function bwGen(Lp,Dn,r){
+  var G=BW.G,grid=[];for(var y=0;y<G;y++){grid.push(new Array(G).fill(null));}
+  var cols=[];while(cols.length<Lp+1+Dn){var k=Math.floor(r()*20);if(cols.indexOf(k)<0)cols.push(k);}
+  var path=cols.slice(0,Lp+1),dis=cols.slice(Lp+1),boxes=[];
+  for(var i=0;i<Lp;i++)boxes.push({lock:path[i],key:i===Lp-1?'gem':path[i+1],sol:true});
+  dis.forEach(function(d){boxes.push({lock:path[Math.floor(r()*Lp)],key:d,sol:false});});
+  /* 섞어서 순서 단서를 없앤다 */
+  for(i=boxes.length-1;i>0;i--){var j=Math.floor(r()*(i+1)),t=boxes[i];boxes[i]=boxes[j];boxes[j]=t;}
+  var occ=[];for(y=0;y<G;y++)occ.push(new Array(G).fill(false));
+  function free(x0,y0,w){for(var yy=y0-1;yy<=y0+1;yy++)for(var xx=x0-1;xx<=x0+w;xx++){if(xx<0||yy<0||xx>=G||yy>=G)continue;if(occ[yy][xx])return false;}return true;}
+  function mark(x0,y0,w){for(var xx=x0;xx<x0+w;xx++)occ[y0][xx]=true;}
+  var ok=true;
+  boxes.forEach(function(b,bi){var tries=0,x,y;do{x=1+Math.floor(r()*(G-3));y=1+Math.floor(r()*(G-2));tries++;}while(!free(x,y,2)&&tries<400);if(tries>=400)ok=false;
+    mark(x,y,2);b.x=x;b.y=y;b.id=bi;grid[y][x]={t:'bkey',b:b};grid[y][x+1]={t:'lock',b:b};});
+  var p;do{p=[Math.floor(r()*G),Math.floor(r()*G)];}while(!free(p[0],p[1],1));mark(p[0],p[1],1);grid[p[1]][p[0]]={t:'key',c:path[0]};
+  var a;do{a=[Math.floor(r()*G),Math.floor(r()*G)];}while(occ[a[1]][a[0]]);
+  return {grid:grid,boxes:boxes,path:path,agent:a,held:null,score:0,done:false,msg:'',seen:{},ok:ok,looseKey:p};}
+function bwNew(){var r=rng(BW.seed++),s;do{s=bwGen(+$('#d9l').value,+$('#d9d').value,r);}while(!s.ok);BW.st=s;bwSee();drawD9();}
+function bwSee(){var s=BW.st;for(var dy=-2;dy<=2;dy++)for(var dx=-2;dx<=2;dx++){var x=s.agent[0]+dx,y=s.agent[1]+dy;if(x<0||y<0||x>=BW.G||y>=BW.G)continue;var c=s.grid[y][x];if(c&&c.b&&!(c.b.id in s.seen))s.seen[c.b.id]=Object.keys(s.seen).length;}}
+function bwMove(dx,dy){var s=BW.st;if(!s||s.done)return;var x=s.agent[0]+dx,y=s.agent[1]+dy;if(x<0||y<0||x>=BW.G||y>=BW.G)return;
+  var c=s.grid[y][x];
+  if(c&&c.t==='lock'){if(s.held!==c.b.lock){s.msg='이 자물쇠를 열 열쇠가 없습니다';drawD9();return;}
+    s.grid[y][x]=null;s.held=null;c.b.opened=true;if(c.b.sol){s.score+=1;s.msg='정답 상자 +1';}else{s.score-=1;s.msg='방해 상자 −1 · 판 종료';s.done=true;}}
+  else if(c&&c.t==='bkey'){if(!c.b.opened){s.msg='자물쇠를 먼저 열어야 합니다';drawD9();return;}
+    s.grid[y][x]=null;if(c.b.key==='gem'){s.score+=10;s.msg='보석 +10 · 성공';s.done=true;}else{s.held=c.b.key;s.msg='열쇠를 주웠습니다';}}
+  else if(c&&c.t==='key'){s.grid[y][x]=null;s.held=c.c;s.msg='열쇠를 주웠습니다';}
+  else s.msg='';
+  s.agent=[x,y];bwSee();drawD9();}
+function swatch(col){return col==='gem'?'<i class="sw gem"></i>':'<i class="sw" style="background:'+BWC[col]+'"></i>';}
+function drawD9(){
+  $('#d9lv').textContent=$('#d9l').value;$('#d9dv').textContent=$('#d9d').value;
+  var s=BW.st,G=BW.G,S=setup($('#d9cv')),c=S.c,W=S.w,H=S.h,cs=Math.floor(Math.min(W,H)/G),ox=Math.floor((W-cs*G)/2),oy=Math.floor((H-cs*G)/2);
+  for(var y=0;y<G;y++)for(var x=0;x<G;x++){var cell=s.grid[y][x],vis=!BW.vp||(Math.abs(x-s.agent[0])<=2&&Math.abs(y-s.agent[1])<=2);
+    c.fillStyle=vis?'#9a9a94':'#3a3a37';c.fillRect(ox+x*cs,oy+y*cs,cs,cs);
+    if(!vis||!cell)continue;
+    var col=cell.t==='key'?BWC[cell.c]:cell.t==='lock'?BWC[cell.b.lock]:(cell.b.key==='gem'?'#ffffff':BWC[cell.b.key]);
+    c.fillStyle=col;c.fillRect(ox+x*cs+1,oy+y*cs+1,cs-2,cs-2);}
+  c.fillStyle='#262624';c.fillRect(ox+s.agent[0]*cs+2,oy+s.agent[1]*cs+2,cs-4,cs-4);
+  if(BW.vp){c.strokeStyle='#ffffff';c.lineWidth=2;c.strokeRect(ox+(s.agent[0]-2)*cs,oy+(s.agent[1]-2)*cs,5*cs,5*cs);}
+  
+  var seen=Object.keys(s.seen).sort(function(a,b){return s.seen[a]-s.seen[b];}).map(function(id){return s.boxes[id];});
+  var h='<div class="sh">본 상자 '+seen.length+' / '+s.boxes.length+'</div>'+(seen.length?seen.map(function(b){return '<div class="bxr'+(b.opened?' op':'')+'">'+swatch(b.key)+swatch(b.lock)+'<span>자물쇠 '+swatch(b.lock)+'→ 얻는 것 '+swatch(b.key)+'</span></div>';}).join(''):'<div class="sm">아직 없음</div>');
+  if(BW.graph){h+='<div class="sh">숨은 그래프</div><div class="sm">'+swatch(s.path[0])+' 바닥 열쇠</div>';
+    s.path.slice(0,-1).forEach(function(cc,i){var outs=s.boxes.filter(function(b){return b.lock===cc;});
+      h+='<div class="sm">'+swatch(cc)+' 로 열 수 있는 상자: '+outs.map(function(b){return swatch(b.key)+(b.sol?'':'<em>(막다른 길)</em>');}).join(' ')+'</div>';});}
+  $('#d9seen').innerHTML=h;
+  $('#d9out').innerHTML='<span>점수<b>'+s.score+'</b></span><span>들고 있는 열쇠<b>'+(s.held==null?'없음':'<i class="sw" style="background:'+BWC[s.held]+'"></i>')+'</b></span><span>상태<b>'+(s.msg||(s.done?'끝':'진행 중'))+'</b></span>';
+}
+document.querySelectorAll('.pad button').forEach(function(b){b.addEventListener('click',function(){var d=b.dataset.mv.split(',');bwMove(+d[0],+d[1]);});});
+document.addEventListener('keydown',function(e){var k={ArrowUp:[0,-1],ArrowDown:[0,1],ArrowLeft:[-1,0],ArrowRight:[1,0]}[e.key];if(!k)return;
+  var rc=$('#d9cv').getBoundingClientRect();if(rc.bottom<0||rc.top>window.innerHeight)return;e.preventDefault();bwMove(k[0],k[1]);});
+$('#d9new').addEventListener('click',bwNew);
+['#d9l','#d9d'].forEach(function(s){$(s).addEventListener('input',bwNew);});
+$('#d9vp').addEventListener('click',function(){BW.vp=!BW.vp;this.setAttribute('aria-pressed',BW.vp?'true':'false');drawD9();});
+$('#d9graph').addEventListener('click',function(){BW.graph=!BW.graph;this.setAttribute('aria-pressed',BW.graph?'true':'false');drawD9();});
+
+/* ══════ 데모 10 · 언어 모델 ══════ */
+var LM={
+  a:{t:'WikiText-103 test',rows:[['LSTM [40]',48.7],['Temporal CNN',45.2],['Gated CNN',37.2],['LSTM [32]',34.3],['Quasi-RNN',33],['RMC',31.6]]},
+  b:{t:'Gutenberg test',rows:[['LSTM [32]',45.5],['RMC',42.0]]},
+  c:{t:'GigaWord v5 test',rows:[['LSTM [32]',43.7],['RMC',38.3]]}},d10k='a';
+var T3={cols:['> 10K','10K–1K','< 1K','전체'],rows:[['LSTM [32]',[39.4,6.5e3,3.7e4,53.5]],['LSTM + Hebbian Softmax',[33.2,3.2e3,1.6e4,43.7]],['RMC',[28.3,3.1e3,6.9e4,38.3]]]};
+function drawD10(){
+  var S=setup($('#d10cv')),c=S.c,W=S.w,H=S.h;c.font='12px system-ui';
+  if(d10k!=='d'){var D=LM[d10k],L=Math.min(150,W*0.36),mx=55,bh=Math.min(28,(H-30)/D.rows.length-8);
+    function X(v){return L+(W-L-50)*v/mx;}
+    c.strokeStyle=css('--grid');c.fillStyle=css('--muted');c.textAlign='center';
+    for(var v=0;v<=50;v+=10){c.beginPath();c.moveTo(X(v),6);c.lineTo(X(v),H-22);c.stroke();c.fillText(v,X(v),H-6);}
+    D.rows.forEach(function(r,i){var y=10+i*(bh+8);c.fillStyle=r[0]==='RMC'?css('--s1'):css('--axis');c.fillRect(L,y,X(r[1])-L,bh);
+      c.fillStyle=css('--text-primary');c.textAlign='right';c.fillText(r[0],L-8,y+bh/2+4);c.textAlign='left';c.fillText(r[1],X(r[1])+6,y+bh/2+4);});
+    var rm=D.rows[D.rows.length-1][1],prev=D.rows.slice(0,-1).sort(function(a,b){return a[1]-b[1];})[0];
+    $('#d10out').innerHTML='<span>RMC<b>'+rm+'</b></span><span>기존 최고 ('+prev[0]+')<b>'+prev[1]+'</b></span><span>차이<b>'+fmt(prev[1]-rm,1)+'</b></span><span>상대 개선<b>'+fmt(100*(prev[1]-rm)/prev[1],1)+'%</b></span>';
+  }else{
+    var L=46,B=40,T=14,lo=1,hi=5,gw=(W-L-10)/4,bw=Math.min(26,gw/4);
+    function Y(v){return T+(H-T-B)*(1-(Math.log10(v)-lo)/(hi-lo));}
+    c.strokeStyle=css('--grid');c.fillStyle=css('--muted');c.textAlign='right';
+    for(var e=lo;e<=hi;e++){c.beginPath();c.moveTo(L,Y(Math.pow(10,e)));c.lineTo(W-10,Y(Math.pow(10,e)));c.stroke();c.fillText('10'+sup(e),L-6,Y(Math.pow(10,e))+4);}
+    var cols=[css('--axis'),css('--s2'),css('--s1')];
+    T3.cols.forEach(function(name,g){var gx=L+g*gw+gw/2-1.5*bw;
+      T3.rows.forEach(function(r,k){var v=r[1][g];c.fillStyle=cols[k];c.fillRect(gx+k*bw,Y(v),bw-3,H-B-Y(v));});
+      c.fillStyle=css('--text-secondary');c.textAlign='center';c.fillText(name,L+g*gw+gw/2,H-B+16);});
+    c.textAlign='left';T3.rows.forEach(function(r,k){c.fillStyle=cols[k];c.fillRect(L+4+k*Math.min(170,(W-L)/3),H-14,10,10);c.fillStyle=css('--text-secondary');c.font='11px system-ui';c.fillText(r[0],L+18+k*Math.min(170,(W-L)/3),H-5);});
+    $('#d10out').innerHTML='<span>흔한 단어 (> 10K) · LSTM → RMC<b>39.4 → 28.3</b></span><span>드문 단어 (< 1K) · LSTM → RMC<b>3.7e4 → 6.9e4</b></span><span>전체<b>53.5 → 38.3</b></span>';
+  }
+}
+['#d10a','#d10b','#d10c','#d10d'].forEach(function(id,k){$(id).addEventListener('click',function(){d10k='abcd'[k];pressed(['#d10a','#d10b','#d10c','#d10d'],id);drawD10();});});
+
+/* ══════ 데모 11 · 시간 비용 ══════ */
+function d11T(){return Math.round(Math.pow(10,1+4*(+$('#d11t').value)/100));}
+function drawD11(){
+  var N=+$('#d11n').value,Tn=d11T();$('#d11nv').textContent=N;$('#d11tv').textContent=fmtInt(Tn);
+  var S=setup($('#d11cv')),c=S.c,W=S.w,H=S.h,L=52,B=24,T=10;
+  var rm=function(t){return N*(N+1)*t;},bf=function(t){return t*(t+1)/2;};
+  var hi=Math.ceil(Math.log10(Math.max(rm(Tn),bf(Tn)))),lo=0;
+  function X(t){return L+(W-L-14)*Math.log10(t)/Math.log10(Tn);}function Y(v){return T+(H-T-B)*(1-(Math.log10(v)-lo)/(hi-lo));}
+  c.font='11px system-ui';c.strokeStyle=css('--grid');c.fillStyle=css('--muted');c.textAlign='right';
+  for(var e=lo;e<=hi;e+=Math.max(1,Math.ceil((hi-lo)/6))){c.beginPath();c.moveTo(L,Y(Math.pow(10,e)));c.lineTo(W-14,Y(Math.pow(10,e)));c.stroke();c.fillText('10'+sup(e),L-6,Y(Math.pow(10,e))+4);}
+  c.textAlign='center';for(e=0;Math.pow(10,e)<=Tn;e++){c.fillText(fmtInt(Math.pow(10,e)),X(Math.pow(10,e)),H-B+15);}
+  [[rm,css('--s1')],[bf,css('--s2')]].forEach(function(p){c.strokeStyle=p[1];c.lineWidth=2.4;c.beginPath();for(var k=0;k<=200;k++){var t=Math.pow(Tn,k/200);if(k)c.lineTo(X(t),Y(p[0](t)));else c.moveTo(X(t),Y(p[0](t)));}c.stroke();});
+  var cross=2*N*(N+1)-1;
+  $('#d11out').innerHTML='<span>RMC 누적 점수<b>'+fmtInt(rm(Tn))+'</b></span><span>버퍼 누적 점수<b>'+fmtInt(bf(Tn))+'</b></span><span>역전되는 길이<b>t ≈ '+fmtInt(cross)+'</b></span>'+
+    '<span>보관하는 벡터 수 (RMC / 버퍼)<b>'+N+' / '+fmtInt(Tn)+'</b></span>';
+}
+['#d11n','#d11t'].forEach(function(s){$(s).addEventListener('input',onFrame(drawD11));});
+
+/* ══════ 퀴즈 ══════ */
+var QZ=[
+ {q:'NTM의 내용 기반 주소와 RMC의 어텐션이 한 스텝 안에서 비교하는 대상의 차이는?',o:['NTM은 칸 ↔ 칸, RMC는 키 ↔ 칸','NTM은 컨트롤러의 키 ↔ 각 칸, RMC는 슬롯 ↔ 슬롯(그리고 슬롯 ↔ 입력)','둘 다 컨트롤러의 키 ↔ 각 칸'],a:1,
+  e:'NTM은 키 하나와 각 칸의 코사인 유사도를 잽니다. RMC는 모든 슬롯이 쿼리를 내서 다른 슬롯과 입력의 키를 보므로 헤드마다 N × (N + 1)개의 비교가 한 스텝에 일어납니다(데모 2).'},
+ {q:'식 (2)에서 쿼리는 M에서만, 키와 값은 [M; x]에서 만든다. 그 결과로 맞는 것은?',o:['M̃은 (N + 1) × F가 되어 메모리가 매 스텝 한 행씩 늘어난다','M̃은 N × F로 메모리 크기가 유지되고, 같은 어텐션이 입력 받아들이기와 기억끼리의 상호작용을 함께 한다','입력 x는 어텐션을 거치지 않고 게이트로만 들어간다'],a:1,
+  e:'쿼리가 N개라 어텐션 행렬은 N × (N + 1), 결과는 N × F입니다. 논문은 이것을 “메모리 크기를 보존하는 어텐션”이라고 부릅니다(데모 4).'},
+ {q:'RMC에서 슬롯 수 N을 2배로 늘리면 (슬롯 크기·헤드 수 고정)?',o:['파라미터 수가 2배가 된다','파라미터 수는 그대로, 메모리 원소 수는 2배, 스텝당 어텐션 점수는 약 4배가 된다','파라미터 수가 4배가 된다'],a:1,
+  e:'어텐션·MLP·게이트의 가중치는 모든 슬롯이 공유합니다. 저장 용량은 N에 비례하고 어텐션 점수는 N(N + 1)에 비례합니다(데모 6).'},
+ {q:'Sonnet 구현이 초기 메모리를 단위 행렬로 두는 이유는?',o:['학습을 빠르게 하려고','슬롯들이 같은 값으로 시작하면 가중치를 공유하는 RMC에서는 영원히 같은 값으로 남기 때문','메모리 값을 0~1 사이로 묶어 두려고'],a:1,
+  e:'같은 행은 같은 쿼리·키·값, 같은 어텐션 가중치, 같은 MLP·게이트를 거치므로 다음 스텝에도 같습니다. 데모 6b에서 0으로 시작하면 슬롯 사이 거리가 정확히 0으로 남습니다.'},
+ {q:'N번째로 먼 벡터 과제에서 논문이 보고한 결과는? (16차원)',o:['LSTM과 DNC는 30%를 넘지 못했고, RMC는 91%','세 모델 모두 90% 이상','DNC 91%, RMC 30%'],a:0,
+  e:'5.1절. LSTM은 은닉 64~4,096, DNC는 여러 메모리 설정을 시도했지만 차이가 없었습니다. 슬롯 8·16개가 1개보다 좋았습니다(부록 그림 4).'},
+ {q:'언어 모델링 결과를 “슬롯끼리 대화하는 메모리” 효과의 증거로 읽기 어려운 이유는?',o:['언어 모델은 슬롯 1개로 학습되었다','언어 모델에서는 RMC가 LSTM보다 나빴다','언어 모델에는 어텐션을 쓰지 않았다'],a:0,
+  e:'부록 A.4의 최종 설정은 슬롯 1개, 헤드 4개, 2,500 units, MLP 5층입니다. 어텐션은 [m; x] 두 행 위에서만 일어납니다. 표 3에서는 드문 단어의 퍼플렉시티가 LSTM보다 나쁘기도 했습니다.'}
+];
+(function(){
+  var box=$('#quiz'),score=0,done=0;
+  QZ.forEach(function(it,qi){
+    var d=document.createElement('div');d.className='q';
+    d.innerHTML='<h4>Q'+(qi+1)+'. '+it.q+'</h4>'+it.o.map(function(o,j){return '<label class="opt"><input type="radio" name="q'+qi+'" value="'+j+'">'+o+'</label>';}).join('')+'<div class="expl"></div>';
+    box.appendChild(d);
+    d.querySelectorAll('input').forEach(function(inp){inp.addEventListener('change',function(){
+      if(d.dataset.done)return;d.dataset.done=1;done++;
+      var j=+inp.value,ok=j===it.a;if(ok)score++;
+      d.querySelectorAll('.opt').forEach(function(l,x){if(x===it.a)l.classList.add('correct');else if(x===j)l.classList.add('wrong');});
+      var ex=d.querySelector('.expl');ex.textContent=(ok?'정답! ':'오답. ')+it.e;ex.classList.add('show');if(!ok)ex.classList.add('bad');
+      $('#quizScore').textContent=done+'문제 중 '+score+'개 정답'+(done===QZ.length?' — 끝!':'');
+    });});
+  });
+})();
+
+/* ══════ 테마·초기화 ══════ */
+function drawAll(){drawD1();drawD2();drawD3();drawD4();drawD5();drawD6();drawD6b();drawD7();drawD7b();if(!d8cur)d8New();else d8Score(false);if(!BW.st)bwNew();else drawD9();drawD10();drawD11();}
+var tbtn=$('#themeBtn');
+if(window.matchMedia&&window.matchMedia('(prefers-color-scheme: dark)').matches)document.documentElement.setAttribute('data-theme','dark');
+function syncBtn(){tbtn.textContent=document.documentElement.getAttribute('data-theme')==='dark'?'◑ 라이트':'◐ 다크';}
+tbtn.addEventListener('click',function(){var d=document.documentElement.getAttribute('data-theme')==='dark';
+  document.documentElement.setAttribute('data-theme',d?'light':'dark');cssCache={};syncBtn();drawAll();});
+syncBtn();drawAll();
+/* 모바일은 스크롤할 때 주소창이 접히며 resize가 계속 온다. 폭이 바뀔 때만 다시 그린다 */
+var rz,lastW=document.documentElement.clientWidth;
+window.addEventListener('resize',function(){clearTimeout(rz);rz=setTimeout(function(){
+  var w=document.documentElement.clientWidth;if(w===lastW)return;lastW=w;drawAll();},120);});
+function renderMath(){if(window.renderMathInElement&&!document.querySelector('.katex'))renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'\\(',right:'\\)',display:false}]});}
+document.addEventListener('DOMContentLoaded',renderMath);
+window.addEventListener('load',renderMath);
+</script>
+</body>
+</html>
